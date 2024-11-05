@@ -1,66 +1,86 @@
 // sketch.js
 
 // Game Variables
-let currentRoom;
+let maze;
+const COLS = 36; // Updated to match mazeLayout
+const ROWS = 18; // Updated to match mazeLayout
+let CELL_SIZE = 40; // Will be recalculated for responsiveness
 let player;
-let bullets = [];
 let opponents = [];
+let bullets = [];
 let immuneCells = [];
 let easterEggTriggered = false;
-let loading = true; // Indicates if the game is loading the first scene
-let roomLoaded = false; // Indicates if the first room has been loaded
-let currentRoomIndex = 0; // Tracks the current room number
+let mazeLoaded = false;
+let exitPosition;
 
-// Images
-let backgroundImages = {};
-let currentBackgroundImage;
+// Define the maze layout: 0 - empty, 1 - wall
+const mazeLayout = [
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  [1,0,1,0,0,0,1,0,1,0,1,0,0,1,0,1,0,0,0,1,0,1,0,1,0,1,0,0,0,1,0,1,0,0,0,1],
+  [1,0,1,0,1,0,1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1],
+  [1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1,0,1],
+  [1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  [1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,1],
+  [1,0,1,0,1,0,1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1],
+  [1,0,1,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  [1,0,0,0,1,0,0,0,1,0,0,0,1,0,1,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,1,0,0,0,0,1],
+  [1,0,1,0,1,0,1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,0,1],
+  [1,0,1,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+];
 
-// Preload function to load any static assets if needed
+// Preload function (if needed)
 function preload() {
-  // Load background images for known rooms if available
-  // Example:
-  // backgroundImages['lungs'] = loadImage('assets/backgrounds/lungs.png');
-  // backgroundImages['stomach'] = loadImage('assets/backgrounds/stomach.png');
-  // Add more as needed
+  // Load any assets here
 }
 
 // Setup function
 function setup() {
-  createCanvas(1792, 1024);  //1792x1024
+  // Calculate CELL_SIZE based on window size and maze dimensions
+  CELL_SIZE = floor(min(windowWidth / COLS, (windowHeight - 50) / ROWS));
   
-  // Initialize Player
-  player = new Player();
+  createCanvas(COLS * CELL_SIZE, ROWS * CELL_SIZE + 50); // +50 for UI
+  maze = new Maze(mazeLayout, COLS, ROWS, CELL_SIZE);
   
-  // Check if rooms are cached in localStorage
-  let cachedRooms = JSON.parse(localStorage.getItem('rooms')) || [];
+  // Define exit position (choose an open cell, e.g., (34,15))
+  exitPosition = {x: 34, y: 15}; // Adjusted to an open cell
   
-  if (cachedRooms.length > 0) {
-    // Load the first room from cache
-    currentRoom = cachedRooms[currentRoomIndex];
-    loadRoom(currentRoom);
-    loading = false;
-    roomLoaded = true;
-  } else {
-    // Fetch the first room from the API
-    fetchRoomData('http://localhost:3000/generate-room');
-  }
+  // Initialize Player at starting position (e.g., cell (1,1))
+  player = new Player(1 * CELL_SIZE + CELL_SIZE / 2, 1 * CELL_SIZE + CELL_SIZE / 2);
+  
+  // Initialize Opponents at various positions within the maze
+  opponents.push(new Opponent(28 * CELL_SIZE + CELL_SIZE / 2, 8 * CELL_SIZE + CELL_SIZE / 2)); // Cell (28,8)
+  opponents.push(new Opponent(28 * CELL_SIZE + CELL_SIZE / 2, 3 * CELL_SIZE + CELL_SIZE / 2)); // Cell (28,3)
+  
+  mazeLoaded = true;
+  
+  // Optional: Debugging Positions
+  // console.log("Player Position:", player.x, player.y);
+  // console.log("Opponents Positions:", opponents.map(op => [op.x, op.y]));
 }
 
 // Draw function
 function draw() {
-  if (loading) {
-    // Display loading screen while data is being fetched
+  background(220);
+  
+  if (!mazeLoaded) {
     displayLoadingScreen();
     return;
   }
-
-  if (!roomLoaded) {
-    return; // Do not run the game logic until the room is loaded
-  }
-
-  // Draw Room Background
-  drawRoomBackground();
-
+  
+  // Draw Maze
+  maze.display();
+  
+  // Draw Exit
+  drawExit();
+  
   // Update and display player
   player.update();
   player.display();
@@ -115,14 +135,24 @@ function draw() {
   // Display Health
   displayHealth();
   
-  // Display Room Status
-  displayRoomStatus();
+  // Check for win condition
+  checkWinCondition();
   
   // Handle Easter Eggs
   checkEasterEgg();
   
   // Handle Immune Cells Effects
   handleImmuneCells();
+}
+
+// Handle window resize for responsiveness
+function windowResized() {
+  // Recalculate CELL_SIZE based on new window size
+  CELL_SIZE = floor(min(windowWidth / COLS, (windowHeight - 50) / ROWS));
+  resizeCanvas(COLS * CELL_SIZE, ROWS * CELL_SIZE + 50);
+  
+  // Optionally, reposition player and opponents if necessary
+  // This can be complex if maze size changes, consider resetting the game
 }
 
 // Display loading screen
@@ -134,94 +164,33 @@ function displayLoadingScreen() {
   text("Loading...", width / 2, height / 2);
 }
 
-// Function to fetch room data from the API
-function fetchRoomData(apiUrl) {
-  loading = true; // Set loading state to true
-
-  fetch(apiUrl)
-    .then(response => response.json())
-    .then(data => {
-      // Process the received room data
-      currentRoom = data;
-
-      // Load the background image
-      loadImage(data[currentRoomIndex].backgroundImageUrl, img => {
-        currentBackgroundImage = img;
-        loading = false; // Set loading state to false once image is loaded
-        roomLoaded = true; // Set roomLoaded to true after room is fully prepared
-        loadOpponents(data[currentRoomIndex]); // Load opponents based on the received room data
-        
-        // Cache the room data in localStorage
-        cacheRoomData(data);
-      });
-    })
-    .catch(error => {
-      console.error('Error fetching room data:', error);
-      loading = false; // Set loading state to false even if an error occurs
-    });
+// Function to draw the exit
+function drawExit() {
+  fill(0, 255, 0);
+  noStroke();
+  rect(exitPosition.x * CELL_SIZE, exitPosition.y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
 }
 
-// Function to cache room data in localStorage
-function cacheRoomData(roomData) {
-  let cachedRooms = JSON.parse(localStorage.getItem('rooms')) || [];
-//   cachedRooms.push(roomData);
-  localStorage.setItem('rooms', JSON.stringify([...cachedRooms, ...roomData]));
-}
-
-// Function to load room data (from cache or API)
-function loadRoom(roomData) {
-  // Load background image
-  loadImage(roomData.backgroundImageUrl, img => {
-    currentBackgroundImage = img;
-    roomLoaded = true;
-    loadOpponents(roomData);
-  }, () => {
-    console.error(`Failed to load background image: ${roomData.backgroundImageUrl}`);
-    roomLoaded = true; // Even if image fails, proceed to load opponents
-    loadOpponents(roomData);
-  });
-}
-
-// Draw Room Background
-function drawRoomBackground() {
-  if (currentBackgroundImage) {
-    image(currentBackgroundImage, 0, 0, width, height);
-  } else {
-    background(0); // Fallback background if the image isn't loaded
-  }
-
-  // Display room details
-  fill(255);
-  textSize(16);
-  textAlign(LEFT, TOP);
-  text(currentRoom.sceneDescription, 10, height - 80, 300, 70);
-  text(currentRoom.diseaseExplanation, 10, height - 40, 300, 30);
-}
-
-// Transition to Next Room
-function transitionToNextRoom() {
-  currentRoomIndex++;
-  let cachedRooms = JSON.parse(localStorage.getItem('rooms')) || [];
-  
-  if (currentRoomIndex < cachedRooms.length) {
-    // Load room from cache
-    currentRoom = cachedRooms[currentRoomIndex];
-    loadRoom(currentRoom);
-  } else {
-    // Fetch new room from API
-    // fetchRoomData('http://localhost:3000/generate-room');
-    Console.log('no cached room')
+// Function to check win condition
+function checkWinCondition() {
+  let playerCell = maze.getCell(player.x, player.y);
+  if (playerCell && playerCell.x === exitPosition.x && playerCell.y === exitPosition.y) {
+    noLoop();
+    background(0, 255, 0);
+    fill(0);
+    textSize(32);
+    textAlign(CENTER, CENTER);
+    text("You Escaped the Maze!\nCongratulations!", width / 2, height / 2);
   }
 }
 
 // Player Class
 class Player {
-  constructor() {
-    this.size = 40;
-    this.x = width / 2;
-    this.y = height / 2;
+  constructor(x, y) {
+    this.size = CELL_SIZE * 0.5;
+    this.x = x;
+    this.y = y;
     this.speed = 4;
-    this.direction = 'up'; // 'up', 'down', 'left', 'right', etc.
     this.health = 100;
     this.lastShot = 0;
     this.shootInterval = 300; // milliseconds
@@ -233,21 +202,9 @@ class Player {
     // Handle Movement
     this.handleMovement();
     
-    // Update direction based on movement
-    if (this.moveDir.x > 0) {
-      this.direction = 'right';
-    } else if (this.moveDir.x < 0) {
-      this.direction = 'left';
-    }
-    if (this.moveDir.y > 0) {
-      this.direction = 'down';
-    } else if (this.moveDir.y < 0) {
-      this.direction = 'up';
-    }
-    
     // Prevent player from moving out of bounds
-    this.x = constrain(this.x, this.size / 2, width - this.size / 2);
-    this.y = constrain(this.y, this.size / 2, height - this.size / 2);
+    this.x = constrain(this.x, CELL_SIZE / 2, width - CELL_SIZE / 2);
+    this.y = constrain(this.y, CELL_SIZE / 2, height - CELL_SIZE / 2 - 50); // 50 for UI
   }
   
   display() {
@@ -255,7 +212,7 @@ class Player {
     push();
     translate(this.x, this.y);
     noStroke();
-    fill(0, 255, 0);
+    fill(this.isInvincible ? color(0, 0, 255, 150) : color(0, 0, 255)); // Semi-transparent if invincible
     rotate(this.getRotationAngle());
     triangle(-this.size / 2, this.size / 2, this.size / 2, this.size / 2, 0, -this.size / 2);
     pop();
@@ -282,32 +239,43 @@ class Player {
       this.moveDir.x /= mag;
       this.moveDir.y /= mag;
       
-      this.x += this.moveDir.x * this.speed;
-      this.y += this.moveDir.y * this.speed;
+      // Calculate new position
+      let newX = this.x + this.moveDir.x * this.speed;
+      let newY = this.y + this.moveDir.y * this.speed;
+      
+      // Check collision with walls
+      if (!maze.isWall(newX, this.y)) {
+        this.x = newX;
+      }
+      if (!maze.isWall(this.x, newY)) {
+        this.y = newY;
+      }
     }
   }
   
   getRotationAngle() {
-    switch(this.direction) {
-      case 'up':
-        return 0;
-      case 'right':
-        return HALF_PI;
-      case 'down':
-        return PI;
-      case 'left':
-        return -HALF_PI;
-      default:
-        return 0;
-    }
+    if (this.moveDir.x > 0) return HALF_PI;
+    if (this.moveDir.x < 0) return -HALF_PI;
+    if (this.moveDir.y > 0) return PI;
+    if (this.moveDir.y < 0) return 0;
+    return 0;
   }
   
   shoot() {
     let currentTime = millis();
     if (currentTime - this.lastShot > this.shootInterval) {
-      bullets.push(new Bullet(this.x, this.y, this.direction));
+      bullets.push(new Bullet(this.x, this.y, this.getShootDirection()));
       this.lastShot = currentTime;
     }
+  }
+  
+  getShootDirection() {
+    // Determine direction based on last movement
+    if (this.moveDir.x > 0) return 'right';
+    if (this.moveDir.x < 0) return 'left';
+    if (this.moveDir.y > 0) return 'down';
+    if (this.moveDir.y < 0) return 'up';
+    return 'up'; // Default
   }
   
   takeDamage(amount) {
@@ -322,13 +290,13 @@ class Player {
       fill(255, 0, 0);
       textSize(32);
       textAlign(CENTER, CENTER);
-      text("Game Over!\nYou were defeated by the pathogens.", width / 2, height / 2);
+      text("Game Over!\nYou were defeated by the opponents.", width / 2, height / 2);
     }
   }
   
   resetPosition() {
-    this.x = width / 2;
-    this.y = height / 2;
+    this.x = 1 * CELL_SIZE + CELL_SIZE / 2;
+    this.y = 1 * CELL_SIZE + CELL_SIZE / 2;
     this.health = 100;
     this.isInvincible = false;
     updateHealthBar(this.health);
@@ -378,277 +346,56 @@ class Bullet {
   }
 }
 
-// Opponent Class (Updated with Dynamic Speed and Movement)
+// Opponent Class (Chasing within the maze)
 class Opponent {
-  constructor(type, movementPattern, difficulty, roomId) {
-    this.type = type;
-    this.movementPattern = movementPattern;
-    this.difficulty = difficulty;
-    this.roomId = roomId;
-    this.size = 30;
-    this.health = this.setHealth();
-    this.baseSpeed = this.setSpeed(); // Base speed based on movement pattern
-    this.currentSpeed = this.baseSpeed * 0.5; // Start at half the base speed
-    this.speedIncrement = 0.01; // Speed increment per frame
-    this.maxSpeed = this.baseSpeed * 1.5; // Maximum speed
-    this.damage = this.setDamage();
-    this.color = this.setColor();
-    this.x = random(this.size, width - this.size);
-    this.y = random(this.size, height - this.size);
-    this.direction = createVector(0, 0);
-    this.movementTimer = 0;
-    this.movementInterval = 120; // frames (2 seconds at 60fps)
-    this.oscillationAngle = random(TWO_PI); // Random starting angle for oscillation
-    this.oscillationSpeed = random(0.05, 0.1); // Speed of oscillation
-    this.oscillationMagnitude = random(10, 20); // Magnitude of oscillation
-  }
-  
-  setHealth() {
-    switch(this.difficulty) {
-      case 'easy':
-        return 50;
-      case 'medium':
-        return 100;
-      case 'hard':
-        return 150;
-      default:
-        return 50;
-    }
-  }
-  
-  setSpeed() {
-    switch(this.movementPattern) {
-      case 'simplePathfinding':
-        return 2;
-      case 'coordinated':
-        return 3;
-      case 'aggressive':
-        return 4;
-      case 'slowAdvance':
-        return 1;
-      case 'randomMovement':
-        return 2;
-      case 'camouflage':
-        return 1.5;
-      case 'zigzag':
-        return 2;
-      case 'swarming':
-        return 3;
-      case 'slow_spread':
-        return 1;
-      default:
-        return 2;
-    }
-  }
-  
-  setDamage() {
-    switch(this.type) {
-      case 'virus':
-        return 10;
-      case 'bacteria':
-        return 5;
-      case 'parasite':
-        return 15;
-      case 'fungus':
-        return 20;
-      case 'allergen':
-        return 25;
-      case 'protozoa':
-        return 15;
-      default:
-        return 5;
-    }
-  }
-  
-  setColor() {
-    switch(this.type) {
-      case 'virus':
-        return color(255, 0, 0); // Red
-      case 'bacteria':
-        return color(0, 0, 255); // Blue
-      case 'parasite':
-        return color(255, 165, 0); // Orange
-      case 'fungus':
-        return color(128, 0, 128); // Purple
-      case 'allergen':
-        return color(255, 255, 0); // Yellow
-      case 'protozoa':
-        return color(0, 255, 255); // Cyan
-      default:
-        return color(255);
-    }
+  constructor(x, y) {
+    this.type = 'opponent';
+    this.size = CELL_SIZE * 0.5;
+    this.health = 100;
+    this.speed = 2;
+    this.damage = 10;
+    this.x = x;
+    this.y = y;
+    this.path = []; // Path to player
+    this.pathIndex = 0;
+    this.recalculateInterval = 60; // frames
+    this.lastRecalculation = frameCount;
   }
   
   update() {
-    // Gradually increase speed up to maxSpeed
-    if (this.currentSpeed < this.maxSpeed) {
-      this.currentSpeed += this.speedIncrement;
-      this.currentSpeed = min(this.currentSpeed, this.maxSpeed);
+    // Recalculate path at intervals
+    if (frameCount - this.lastRecalculation > this.recalculateInterval) {
+      this.path = maze.findPath(this.x, this.y, player.x, player.y);
+      this.pathIndex = 0;
+      this.lastRecalculation = frameCount;
     }
     
-    // Update movement based on pattern
-    switch(this.movementPattern) {
-      case 'simplePathfinding':
-        this.simplePathfinding();
-        break;
-      case 'coordinated':
-        this.coordinated();
-        break;
-      case 'aggressive':
-        this.aggressive();
-        break;
-      case 'slowAdvance':
-        this.slowAdvance();
-        break;
-      case 'randomMovement':
-        this.randomMovement();
-        break;
-      case 'camouflage':
-        this.camouflage();
-        break;
-      case 'zigzag':
-        this.zigzagMovement();
-        break;
-      case 'swarming':
-        this.swarmingMovement();
-        break;
-      case 'slow_spread':
-        this.slowSpreadMovement();
-        break;
-      default:
-        this.simplePathfinding();
+    // Move along the path
+    if (this.path && this.pathIndex < this.path.length) {
+      let target = this.path[this.pathIndex];
+      let targetX = target.x * CELL_SIZE + CELL_SIZE / 2;
+      let targetY = target.y * CELL_SIZE + CELL_SIZE / 2;
+      
+      let dir = createVector(targetX - this.x, targetY - this.y);
+      let distance = dir.mag();
+      if (distance < this.speed) {
+        this.x = targetX;
+        this.y = targetY;
+        this.pathIndex++;
+      } else {
+        dir.normalize();
+        this.x += dir.x * this.speed;
+        this.y += dir.y * this.speed;
+      }
     }
-    
-    // Update oscillation for more dynamic movement
-    this.oscillationAngle += this.oscillationSpeed;
   }
   
   display() {
     push();
     noStroke();
-    fill(this.color);
+    fill(255, 0, 0);
     ellipse(this.x, this.y, this.size);
     pop();
-  }
-  
-  // Movement Patterns
-  simplePathfinding() {
-    // Move towards the player
-    let dir = createVector(player.x - this.x, player.y - this.y);
-    dir.normalize();
-    this.x += dir.x * this.currentSpeed;
-    this.y += dir.y * this.currentSpeed;
-  }
-  
-  coordinated() {
-    // Implement coordinated movement, e.g., move in groups or formations
-    // For simplicity, slightly adjust direction based on oscillation
-    let dir = createVector(player.x - this.x, player.y - this.y);
-    dir.normalize();
-    // Add oscillation to the direction
-    dir.x += cos(this.oscillationAngle) * 0.1;
-    dir.y += sin(this.oscillationAngle) * 0.1;
-    dir.normalize();
-    this.x += dir.x * this.currentSpeed;
-    this.y += dir.y * this.currentSpeed;
-  }
-  
-  aggressive() {
-    // Move faster towards the player with direct approach
-    let dir = createVector(player.x - this.x, player.y - this.y);
-    dir.normalize();
-    this.x += dir.x * this.currentSpeed;
-    this.y += dir.y * this.currentSpeed;
-  }
-  
-  slowAdvance() {
-    // Move slowly towards the player with slight randomness
-    let dir = createVector(player.x - this.x, player.y - this.y);
-    dir.normalize();
-    // Add slight randomness
-    dir.x += random(-0.2, 0.2);
-    dir.y += random(-0.2, 0.2);
-    dir.normalize();
-    this.x += dir.x * this.currentSpeed;
-    this.y += dir.y * this.currentSpeed;
-  }
-  
-  randomMovement() {
-    // Change direction at intervals and move in that direction
-    if (frameCount % this.movementInterval === 0) {
-      this.direction = p5.Vector.random2D();
-      this.direction.mult(this.currentSpeed);
-    }
-    this.x += this.direction.x;
-    this.y += this.direction.y;
-    
-    // Keep within bounds with slight bounce
-    if (this.x <= this.size / 2 || this.x >= width - this.size / 2) {
-      this.direction.x *= -1;
-    }
-    if (this.y <= this.size / 2 || this.y >= height - this.size / 2) {
-      this.direction.y *= -1;
-    }
-  }
-  
-  camouflage() {
-    // Move towards the player with occasional slowdown or diversion
-    let dir = createVector(player.x - this.x, player.y - this.y);
-    dir.normalize();
-    // Random chance to divert
-    if (random(1) < 0.05) {
-      dir.x += random(-0.5, 0.5);
-      dir.y += random(-0.5, 0.5);
-      dir.normalize();
-    }
-    this.x += dir.x * this.currentSpeed;
-    this.y += dir.y * this.currentSpeed;
-  }
-  
-  zigzagMovement() {
-    // Move towards the player with a zigzag pattern
-    let dir = createVector(player.x - this.x, player.y - this.y);
-    dir.normalize();
-    // Apply zigzag oscillation perpendicular to the direction
-    let perpendicular = createVector(-dir.y, dir.x);
-    let zigzag = perpendicular.copy().mult(sin(this.oscillationAngle) * 0.5);
-    dir.add(zigzag);
-    dir.normalize();
-    this.x += dir.x * this.currentSpeed;
-    this.y += dir.y * this.currentSpeed;
-  }
-  
-  swarmingMovement() {
-    // Move in a swarming pattern, slightly cohesive
-    let dir = createVector(player.x - this.x, player.y - this.y);
-    dir.normalize();
-    // Add some cohesion with nearby opponents
-    let nearby = opponents.filter(op => op !== this && dist(this.x, this.y, op.x, op.y) < 100);
-    if (nearby.length > 0) {
-      let avgDir = createVector(0, 0);
-      nearby.forEach(op => {
-        avgDir.add(p5.Vector.sub(createVector(op.x, op.y), createVector(this.x, this.y)));
-      });
-      avgDir.div(nearby.length);
-      avgDir.normalize();
-      dir.add(avgDir.mult(0.1));
-      dir.normalize();
-    }
-    this.x += dir.x * this.currentSpeed;
-    this.y += dir.y * this.currentSpeed;
-  }
-  
-  slowSpreadMovement() {
-    // Move slowly and spread out over time
-    let dir = createVector(player.x - this.x, player.y - this.y);
-    dir.normalize();
-    this.x += dir.x * this.currentSpeed * 0.5; // Move slower
-    this.y += dir.y * this.currentSpeed * 0.5;
-    
-    // Gradually spread out from the player
-    let spreadFactor = map(this.currentSpeed, this.baseSpeed * 0.5, this.maxSpeed, 0, 1);
-    this.x += random(-spreadFactor, spreadFactor);
-    this.y += random(-spreadFactor, spreadFactor);
   }
   
   hits(player) {
@@ -666,7 +413,132 @@ class Opponent {
   }
 }
 
-// ImmuneCell Assistance Class
+// Maze Class
+class Maze {
+  constructor(layout, cols, rows, cellSize) {
+    this.layout = layout;
+    this.cols = cols;
+    this.rows = rows;
+    this.cellSize = cellSize;
+  }
+  
+  display() {
+    for (let y = 0; y < this.rows; y++) {
+      for (let x = 0; x < this.cols; x++) {
+        if (this.layout[y][x] === 1) {
+          fill(50);
+          noStroke();
+          rect(x * this.cellSize, y * this.cellSize, this.cellSize, this.cellSize);
+        }
+      }
+    }
+  }
+  
+  isWall(x, y) {
+    let cell = this.getCell(x, y);
+    if (cell) {
+      return this.layout[cell.y][cell.x] === 1;
+    }
+    return true;
+  }
+  
+  getCell(x, y) {
+    let cellX = floor(x / this.cellSize);
+    let cellY = floor(y / this.cellSize);
+    if (cellX >= 0 && cellX < this.cols && cellY >= 0 && cellY < this.rows) {
+      return {x: cellX, y: cellY};
+    }
+    return null;
+  }
+  
+  findPath(startX, startY, endX, endY) {
+    // Implement A* pathfinding
+    let start = this.getCell(startX, startY);
+    let end = this.getCell(endX, endY);
+    if (!start || !end) return [];
+    
+    let openSet = [];
+    let closedSet = [];
+    let cameFrom = {};
+    let gScore = {};
+    let fScore = {};
+    
+    let startKey = `${start.x},${start.y}`;
+    let endKey = `${end.x},${end.y}`;
+    
+    gScore[startKey] = 0;
+    fScore[startKey] = this.heuristic(start, end);
+    openSet.push(startKey);
+    
+    while (openSet.length > 0) {
+      // Find node with lowest fScore
+      let currentKey = openSet.reduce((a, b) => (fScore[a] < fScore[b] ? a : b));
+      let [currentX, currentY] = currentKey.split(',').map(Number);
+      let current = {x: currentX, y: currentY};
+      
+      if (currentKey === endKey) {
+        // Reconstruct path
+        let path = [];
+        let tempKey = currentKey;
+        while (tempKey in cameFrom) {
+          let [x, y] = tempKey.split(',').map(Number);
+          path.push({x: x, y: y});
+          tempKey = cameFrom[tempKey];
+        }
+        path.reverse();
+        return path;
+      }
+      
+      openSet = openSet.filter(key => key !== currentKey);
+      closedSet.push(currentKey);
+      
+      let neighbors = this.getNeighbors(current);
+      for (let neighbor of neighbors) {
+        let neighborKey = `${neighbor.x},${neighbor.y}`;
+        if (closedSet.includes(neighborKey)) continue;
+        if (this.layout[neighbor.y][neighbor.x] === 1) continue; // Wall
+        
+        let tentativeGScore = gScore[currentKey] + 1;
+        if (!(neighborKey in gScore) || tentativeGScore < gScore[neighborKey]) {
+          cameFrom[neighborKey] = currentKey;
+          gScore[neighborKey] = tentativeGScore;
+          fScore[neighborKey] = tentativeGScore + this.heuristic(neighbor, end);
+          if (!openSet.includes(neighborKey)) {
+            openSet.push(neighborKey);
+          }
+        }
+      }
+    }
+    
+    // No path found
+    return [];
+  }
+  
+  heuristic(a, b) {
+    // Manhattan distance
+    return abs(a.x - b.x) + abs(a.y - b.y);
+  }
+  
+  getNeighbors(cell) {
+    let neighbors = [];
+    let dirs = [
+      {x: 1, y: 0},
+      {x: -1, y: 0},
+      {x: 0, y: 1},
+      {x: 0, y: -1},
+    ];
+    for (let dir of dirs) {
+      let nx = cell.x + dir.x;
+      let ny = cell.y + dir.y;
+      if (nx >= 0 && nx < this.cols && ny >= 0 && ny < this.rows) {
+        neighbors.push({x: nx, y: ny});
+      }
+    }
+    return neighbors;
+  }
+}
+
+// ImmuneCell Assistance Class (Same as original)
 class ImmuneCellAssist {
   constructor(type) {
     this.type = type;
@@ -767,41 +639,6 @@ class ImmuneCellAssist {
   }
 }
 
-// Function to load room data
-function loadRoom(roomData) {
-  currentRoom = roomData;
-  
-  // Load background image
-  loadImage(roomData.backgroundImageUrl, img => {
-    currentBackgroundImage = img;
-    roomLoaded = true;
-    loadOpponents(roomData);
-  }, () => {
-    console.error(`Failed to load background image: ${roomData.backgroundImageUrl}`);
-    roomLoaded = true; // Even if image fails, proceed to load opponents
-    loadOpponents(roomData);
-  });
-}
-
-// Load Opponents based on room data
-function loadOpponents(room) {
-  opponents = []; // Clear existing opponents
-  room.opponents.forEach(opponentType => {
-    for (let i = 0; i < opponentType.count; i++) {
-      opponents.push(new Opponent(opponentType.type, opponentType.movementPattern, opponentType.difficulty, room.roomId));
-    }
-  });
-  
-  // Reset Easter Egg Trigger
-  easterEggTriggered = false;
-  
-  // Reset immune cells
-  immuneCells = [];
-  
-  // Optionally, reset player position or other stats
-  player.resetPosition();
-}
-
 // Handle Key Presses
 function keyPressed() {
   if (key === ' ') { // Spacebar to shoot
@@ -809,32 +646,10 @@ function keyPressed() {
   }
 }
 
-// Easter Egg Checking Function
+// Easter Egg Checking Function (Adjust as needed)
 function checkEasterEgg() {
-  let egg = currentRoom.easterEgg;
-  if (egg && !easterEggTriggered) {
-    // Implement trigger tasks based on room
-    // For simplicity, we'll assume the triggerTask is met based on roomId and specific conditions
-    switch(currentRoom.roomId) {
-      case 'lungs_alveoli_07':
-        // "Find the hidden antibody power-up among the capillaries."
-        // Implement logic to find and collect the power-up
-        // Not implemented in this example
-        break;
-      case 'stomach_gastric_pit_03':
-        // "Collect all digestive enzymes scattered around the room."
-        // Implement logic to collect items
-        // Not implemented in this example
-        break;
-      case 'bloodstream_capillary_12':
-        // "Defeat all pathogens within a time limit of 60 seconds."
-        // Implement timer
-        // Not implemented in this example
-        break;
-      default:
-        break;
-    }
-  }
+  // Implement any maze-specific easter eggs if desired
+  // Currently no implementation
 }
 
 // Trigger Easter Egg Reward
@@ -844,7 +659,7 @@ function triggerEasterEgg(reward) {
   alert("Easter Egg Unlocked: " + getEasterEggDescription(reward));
 }
 
-// Get Easter Egg Description
+// Get Easter Egg Description (Same as original)
 function getEasterEggDescription(reward) {
   let description = "";
   switch(reward) {
@@ -875,21 +690,23 @@ function getEasterEggDescription(reward) {
 
 // Display Health Bar
 function displayHealth() {
-  // Update the health bar's width and color
-  let healthBar = select('#health');
-  if (healthBar) {
-    healthBar.style('width', `${player.health}%`);
-    if (player.health > 60) {
-      healthBar.style('background-color', 'green');
-    } else if (player.health > 30) {
-      healthBar.style('background-color', 'yellow');
-    } else {
-      healthBar.style('background-color', 'red');
-    }
-  }
+  // UI Background
+  fill(255);
+  rect(0, height - 50, width, 50);
+  
+  // Health Bar
+  fill(255, 0, 0);
+  let healthWidth = map(player.health, 0, 100, 0, width * 0.3);
+  rect(10, height - 30, healthWidth, 20);
+  
+  // Health Text
+  fill(0);
+  textSize(16);
+  textAlign(LEFT, CENTER);
+  text("Health", 10, height - 40);
 }
 
-// Update Health Bar Function
+// Update Health Bar Function (Adjusted)
 function updateHealthBar(newHealth) {
   player.health = constrain(newHealth, 0, 100);
   displayHealth();
@@ -902,7 +719,7 @@ function handleImmuneCells() {
     cell.display();
   }
   
-  // Example: Implement shield and invincibility effects
+  // Implement shield and invincibility effects
   for (let cell of immuneCells) {
     if (cell.effect === 'shield') {
       // Implement shield logic, e.g., reduce damage or block attacks
@@ -915,25 +732,4 @@ function handleImmuneCells() {
   }
 }
 
-// Display Room Status
-function displayRoomStatus() {
-  // If all opponents are defeated, prompt player to move to a wall to transition
-  if (opponents.length === 0 && !loading) {
-    fill(255);
-    textSize(20);
-    textAlign(CENTER, CENTER);
-    text("All germs defeated!\nMove to a wall to proceed.", width / 2, 50);
-    
-    // Check if player is touching a wall
-    if (isPlayerAtWall()) {
-      transitionToNextRoom();
-    }
-  }
-}
-
-// Check if player is at any wall
-function isPlayerAtWall() {
-  let buffer = 20; // Distance from wall to trigger transition
-  return (player.x <= buffer || player.x >= width - buffer ||
-          player.y <= buffer || player.y >= height - buffer);
-}
+// Maze navigation without rooms; all handled locally
