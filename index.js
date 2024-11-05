@@ -1,49 +1,65 @@
 // sketch.js
 
 // Game Variables
-let rooms = [];
-let currentRoomIndex = 0;
 let currentRoom;
 let player;
 let bullets = [];
 let opponents = [];
 let immuneCells = [];
 let easterEggTriggered = false;
+let loading = true; // Indicates if the game is loading the first scene
+let roomLoaded = false; // Indicates if the first room has been loaded
+let currentRoomIndex = 0; // Tracks the current room number
 
-// Images (Placeholder colors will be used instead of actual images)
+// Images
 let backgroundImages = {};
+let currentBackgroundImage;
 
-// Preload function to load images (if available)
+// Preload function to load any static assets if needed
 function preload() {
-  // Load images if you have them
+  // Load background images for known rooms if available
   // Example:
-  // backgroundImages['lungs'] = loadImage('images/lungs.png');
-  // For placeholders, we'll skip image loading
+  // backgroundImages['lungs'] = loadImage('assets/backgrounds/lungs.png');
+  // backgroundImages['stomach'] = loadImage('assets/backgrounds/stomach.png');
+  // Add more as needed
 }
 
 // Setup function
 function setup() {
-  createCanvas(800, 600);
-  
-  // Initialize Rooms
-  initializeRooms();
-  
-  // Set the first room
-  currentRoom = rooms[currentRoomIndex];
+  createCanvas(1792, 1024);  //1792x1024
   
   // Initialize Player
   player = new Player();
   
-  // Load Opponents for the current room
-  loadOpponents(currentRoom);
+  // Check if rooms are cached in localStorage
+  let cachedRooms = JSON.parse(localStorage.getItem('rooms')) || [];
+  
+  if (cachedRooms.length > 0) {
+    // Load the first room from cache
+    currentRoom = cachedRooms[currentRoomIndex];
+    loadRoom(currentRoom);
+    loading = false;
+    roomLoaded = true;
+  } else {
+    // Fetch the first room from the API
+    fetchRoomData('http://localhost:3000/generate-room');
+  }
 }
 
 // Draw function
 function draw() {
-  background(0); // Default background
+  if (loading) {
+    // Display loading screen while data is being fetched
+    displayLoadingScreen();
+    return;
+  }
+
+  if (!roomLoaded) {
+    return; // Do not run the game logic until the room is loaded
+  }
 
   // Draw Room Background
-  drawRoomBackground(currentRoom);
+  drawRoomBackground();
 
   // Update and display player
   player.update();
@@ -99,197 +115,102 @@ function draw() {
   // Display Health
   displayHealth();
   
-  // Check if room is cleared
-  if (opponents.length === 0) {
-    transitionToNextRoom();
-  }
+  // Display Room Status
+  displayRoomStatus();
   
-  // Check and handle Easter Eggs
+  // Handle Easter Eggs
   checkEasterEgg();
-}
-
-// Initialize Room Data
-function initializeRooms() {
-  rooms = [
-    {
-      "roomId": "lungs",
-      "background": "lungs",
-      "opponents": [
-        {
-          "type": "virus",
-          "count": 5,
-          "movementPattern": "coordinated",
-          "difficulty": "medium"
-        },
-        {
-          "type": "bacteria",
-          "count": 8,
-          "movementPattern": "simplePathfinding",
-          "difficulty": "easy"
-        }
-      ],
-      "sceneDescription": "You are now in the lungs, where oxygen is exchanged. A viral infection is disrupting the airflow, making it harder for the body to breathe.",
-      "diseaseExplanation": "Viruses attack cells in the respiratory system, leading to symptoms like difficulty breathing and coughing.",
-      "easterEgg": {
-        "triggerTask": "Destroy all viruses without missing any shots.",
-        "reward": "ImmuneCellAssist",
-        "description": "Completing this task summons immune cells that provide temporary shields."
-      }
-    },
-    {
-      "roomId": "stomach",
-      "background": "stomach",
-      "opponents": [
-        {
-          "type": "bacteria",
-          "count": 10,
-          "movementPattern": "simplePathfinding",
-          "difficulty": "easy"
-        },
-        {
-          "type": "parasite",
-          "count": 3,
-          "movementPattern": "aggressive",
-          "difficulty": "hard"
-        }
-      ],
-      "sceneDescription": "Inside the stomach, acidic conditions are being compromised by harmful bacteria and parasites, threatening the digestive process.",
-      "diseaseExplanation": "Bacterial infections can disrupt digestion, while parasites consume nutrients, weakening the body.",
-      "easterEgg": {
-        "triggerTask": "Collect all digestive enzymes scattered around the room.",
-        "reward": "HealthBoost",
-        "description": "Completing this task restores a portion of your health."
-      }
-    },
-    {
-      "roomId": "bloodstream",
-      "background": "bloodstream",
-      "opponents": [
-        {
-          "type": "virus",
-          "count": 7,
-          "movementPattern": "coordinated",
-          "difficulty": "medium"
-        },
-        {
-          "type": "bacteria",
-          "count": 5,
-          "movementPattern": "simplePathfinding",
-          "difficulty": "easy"
-        },
-        {
-          "type": "fungus",
-          "count": 4,
-          "movementPattern": "slowAdvance",
-          "difficulty": "hard"
-        }
-      ],
-      "sceneDescription": "Navigating through the bloodstream, you encounter a mix of pathogens trying to evade your attacks and spread through the body.",
-      "diseaseExplanation": "Pathogens in the bloodstream can quickly reach various organs, making them dangerous and requiring swift action.",
-      "easterEgg": {
-        "triggerTask": "Defeat all pathogens within a time limit of 60 seconds.",
-        "reward": "SpeedBoost",
-        "description": "Completing this task temporarily increases your movement and shooting speed."
-      }
-    },
-    {
-      "roomId": "skin",
-      "background": "skin",
-      "opponents": [
-        {
-          "type": "bacteria",
-          "count": 12,
-          "movementPattern": "simplePathfinding",
-          "difficulty": "easy"
-        },
-        {
-          "type": "virus",
-          "count": 4,
-          "movementPattern": "coordinated",
-          "difficulty": "medium"
-        },
-        {
-          "type": "allergen",
-          "count": 2,
-          "movementPattern": "randomMovement",
-          "difficulty": "hard"
-        }
-      ],
-      "sceneDescription": "On the skin's surface, allergens and microbes are causing irritation and infections, threatening the body's first line of defense.",
-      "diseaseExplanation": "Allergens trigger immune responses that can lead to inflammation, while microbes on the skin can cause infections.",
-      "easterEgg": {
-        "triggerTask": "Identify and eliminate all allergens by targeting their unique markers.",
-        "reward": "TemporaryInvisibility",
-        "description": "Completing this task makes you invisible to enemies for a short duration."
-      }
-    }
-    // Add more rooms as needed
-  ];
-}
-
-// Load Opponents based on room data
-function loadOpponents(room) {
-  opponents = []; // Clear existing opponents
-  room.opponents.forEach(opponentType => {
-    for (let i = 0; i < opponentType.count; i++) {
-      opponents.push(new Opponent(opponentType.type, opponentType.movementPattern, opponentType.difficulty, room.roomId));
-    }
-  });
   
-  // Reset Easter Egg Trigger
-  easterEggTriggered = false;
+  // Handle Immune Cells Effects
+  handleImmuneCells();
+}
+
+// Display loading screen
+function displayLoadingScreen() {
+  background(0);
+  fill(255);
+  textSize(32);
+  textAlign(CENTER, CENTER);
+  text("Loading...", width / 2, height / 2);
+}
+
+// Function to fetch room data from the API
+function fetchRoomData(apiUrl) {
+  loading = true; // Set loading state to true
+
+  fetch(apiUrl)
+    .then(response => response.json())
+    .then(data => {
+      // Process the received room data
+      currentRoom = data;
+
+      // Load the background image
+      loadImage(data[currentRoomIndex].backgroundImageUrl, img => {
+        currentBackgroundImage = img;
+        loading = false; // Set loading state to false once image is loaded
+        roomLoaded = true; // Set roomLoaded to true after room is fully prepared
+        loadOpponents(data[currentRoomIndex]); // Load opponents based on the received room data
+        
+        // Cache the room data in localStorage
+        cacheRoomData(data);
+      });
+    })
+    .catch(error => {
+      console.error('Error fetching room data:', error);
+      loading = false; // Set loading state to false even if an error occurs
+    });
+}
+
+// Function to cache room data in localStorage
+function cacheRoomData(roomData) {
+  let cachedRooms = JSON.parse(localStorage.getItem('rooms')) || [];
+//   cachedRooms.push(roomData);
+  localStorage.setItem('rooms', JSON.stringify([...cachedRooms, ...roomData]));
+}
+
+// Function to load room data (from cache or API)
+function loadRoom(roomData) {
+  // Load background image
+  loadImage(roomData.backgroundImageUrl, img => {
+    currentBackgroundImage = img;
+    roomLoaded = true;
+    loadOpponents(roomData);
+  }, () => {
+    console.error(`Failed to load background image: ${roomData.backgroundImageUrl}`);
+    roomLoaded = true; // Even if image fails, proceed to load opponents
+    loadOpponents(roomData);
+  });
 }
 
 // Draw Room Background
-function drawRoomBackground(room) {
-  // Placeholder: Change background color based on room
-  switch(room.background) {
-    case 'lungs':
-      background(135, 206, 235); // Sky blue
-      break;
-    case 'stomach':
-      background(255, 165, 0); // Orange
-      break;
-    case 'bloodstream':
-      background(220, 20, 60); // Crimson
-      break;
-    case 'skin':
-      background(245, 222, 179); // Wheat
-      break;
-    default:
-      background(0); // Default black
+function drawRoomBackground() {
+  if (currentBackgroundImage) {
+    image(currentBackgroundImage, 0, 0, width, height);
+  } else {
+    background(0); // Fallback background if the image isn't loaded
   }
-  
-  // If using images, uncomment below and ensure images are loaded
-  /*
-  if (backgroundImages[room.background]) {
-    image(backgroundImages[room.background], 0, 0, width, height);
-  }
-  */
-  
-  // Optionally, display scene description and disease explanation
+
+  // Display room details
   fill(255);
   textSize(16);
   textAlign(LEFT, TOP);
-  text(room.sceneDescription, 10, height - 80, 300, 70);
-  text(room.diseaseExplanation, 10, height - 40, 300, 30);
+  text(currentRoom.sceneDescription, 10, height - 80, 300, 70);
+  text(currentRoom.diseaseExplanation, 10, height - 40, 300, 30);
 }
 
 // Transition to Next Room
 function transitionToNextRoom() {
   currentRoomIndex++;
-  if (currentRoomIndex < rooms.length) {
-    currentRoom = rooms[currentRoomIndex];
-    loadOpponents(currentRoom);
-    player.resetPosition();
+  let cachedRooms = JSON.parse(localStorage.getItem('rooms')) || [];
+  
+  if (currentRoomIndex < cachedRooms.length) {
+    // Load room from cache
+    currentRoom = cachedRooms[currentRoomIndex];
+    loadRoom(currentRoom);
   } else {
-    // Game Completed
-    noLoop();
-    background(0);
-    fill(255);
-    textSize(32);
-    textAlign(CENTER, CENTER);
-    text("Congratulations!\nThe body is germ-free.", width / 2, height / 2);
+    // Fetch new room from API
+    // fetchRoomData('http://localhost:3000/generate-room');
+    Console.log('no cached room')
   }
 }
 
@@ -305,6 +226,7 @@ class Player {
     this.lastShot = 0;
     this.shootInterval = 300; // milliseconds
     this.moveDir = {x: 0, y: 0};
+    this.isInvincible = false; // Flag for invincibility
   }
   
   update() {
@@ -389,6 +311,8 @@ class Player {
   }
   
   takeDamage(amount) {
+    if (this.isInvincible) return; // Ignore damage if invincible
+    
     this.health -= amount;
     updateHealthBar(this.health);
     if (this.health <= 0) {
@@ -406,6 +330,7 @@ class Player {
     this.x = width / 2;
     this.y = height / 2;
     this.health = 100;
+    this.isInvincible = false;
     updateHealthBar(this.health);
   }
 }
@@ -453,7 +378,7 @@ class Bullet {
   }
 }
 
-// Opponent Class
+// Opponent Class (Updated with Dynamic Speed and Movement)
 class Opponent {
   constructor(type, movementPattern, difficulty, roomId) {
     this.type = type;
@@ -462,15 +387,20 @@ class Opponent {
     this.roomId = roomId;
     this.size = 30;
     this.health = this.setHealth();
-    this.speed = this.setSpeed();
+    this.baseSpeed = this.setSpeed(); // Base speed based on movement pattern
+    this.currentSpeed = this.baseSpeed * 0.5; // Start at half the base speed
+    this.speedIncrement = 0.01; // Speed increment per frame
+    this.maxSpeed = this.baseSpeed * 1.5; // Maximum speed
     this.damage = this.setDamage();
     this.color = this.setColor();
     this.x = random(this.size, width - this.size);
     this.y = random(this.size, height - this.size);
-    this.target = player;
     this.direction = createVector(0, 0);
     this.movementTimer = 0;
-    this.movementInterval = 60; // frames
+    this.movementInterval = 120; // frames (2 seconds at 60fps)
+    this.oscillationAngle = random(TWO_PI); // Random starting angle for oscillation
+    this.oscillationSpeed = random(0.05, 0.1); // Speed of oscillation
+    this.oscillationMagnitude = random(10, 20); // Magnitude of oscillation
   }
   
   setHealth() {
@@ -500,6 +430,12 @@ class Opponent {
         return 2;
       case 'camouflage':
         return 1.5;
+      case 'zigzag':
+        return 2;
+      case 'swarming':
+        return 3;
+      case 'slow_spread':
+        return 1;
       default:
         return 2;
     }
@@ -544,6 +480,13 @@ class Opponent {
   }
   
   update() {
+    // Gradually increase speed up to maxSpeed
+    if (this.currentSpeed < this.maxSpeed) {
+      this.currentSpeed += this.speedIncrement;
+      this.currentSpeed = min(this.currentSpeed, this.maxSpeed);
+    }
+    
+    // Update movement based on pattern
     switch(this.movementPattern) {
       case 'simplePathfinding':
         this.simplePathfinding();
@@ -563,9 +506,21 @@ class Opponent {
       case 'camouflage':
         this.camouflage();
         break;
+      case 'zigzag':
+        this.zigzagMovement();
+        break;
+      case 'swarming':
+        this.swarmingMovement();
+        break;
+      case 'slow_spread':
+        this.slowSpreadMovement();
+        break;
       default:
         this.simplePathfinding();
     }
+    
+    // Update oscillation for more dynamic movement
+    this.oscillationAngle += this.oscillationSpeed;
   }
   
   display() {
@@ -576,62 +531,124 @@ class Opponent {
     pop();
   }
   
+  // Movement Patterns
   simplePathfinding() {
     // Move towards the player
     let dir = createVector(player.x - this.x, player.y - this.y);
     dir.normalize();
-    this.x += dir.x * this.speed;
-    this.y += dir.y * this.speed;
+    this.x += dir.x * this.currentSpeed;
+    this.y += dir.y * this.currentSpeed;
   }
   
   coordinated() {
-    // Move in groups or coordinated patterns
-    // For simplicity, same as simplePathfinding
-    this.simplePathfinding();
-    
-    // Additional coordinated behavior can be added here
+    // Implement coordinated movement, e.g., move in groups or formations
+    // For simplicity, slightly adjust direction based on oscillation
+    let dir = createVector(player.x - this.x, player.y - this.y);
+    dir.normalize();
+    // Add oscillation to the direction
+    dir.x += cos(this.oscillationAngle) * 0.1;
+    dir.y += sin(this.oscillationAngle) * 0.1;
+    dir.normalize();
+    this.x += dir.x * this.currentSpeed;
+    this.y += dir.y * this.currentSpeed;
   }
   
   aggressive() {
-    // Move faster towards the player
+    // Move faster towards the player with direct approach
     let dir = createVector(player.x - this.x, player.y - this.y);
     dir.normalize();
-    this.x += dir.x * this.speed;
-    this.y += dir.y * this.speed;
-    
-    // Optionally, add shooting behavior
-    // Not implemented in this example
+    this.x += dir.x * this.currentSpeed;
+    this.y += dir.y * this.currentSpeed;
   }
   
   slowAdvance() {
-    // Move slowly towards the player
+    // Move slowly towards the player with slight randomness
     let dir = createVector(player.x - this.x, player.y - this.y);
     dir.normalize();
-    this.x += dir.x * this.speed;
-    this.y += dir.y * this.speed;
+    // Add slight randomness
+    dir.x += random(-0.2, 0.2);
+    dir.y += random(-0.2, 0.2);
+    dir.normalize();
+    this.x += dir.x * this.currentSpeed;
+    this.y += dir.y * this.currentSpeed;
   }
   
   randomMovement() {
-    // Move randomly
+    // Change direction at intervals and move in that direction
     if (frameCount % this.movementInterval === 0) {
       this.direction = p5.Vector.random2D();
+      this.direction.mult(this.currentSpeed);
     }
-    this.x += this.direction.x * this.speed;
-    this.y += this.direction.y * this.speed;
+    this.x += this.direction.x;
+    this.y += this.direction.y;
     
-    // Keep within bounds
-    this.x = constrain(this.x, this.size / 2, width - this.size / 2);
-    this.y = constrain(this.y, this.size / 2, height - this.size / 2);
+    // Keep within bounds with slight bounce
+    if (this.x <= this.size / 2 || this.x >= width - this.size / 2) {
+      this.direction.x *= -1;
+    }
+    if (this.y <= this.size / 2 || this.y >= height - this.size / 2) {
+      this.direction.y *= -1;
+    }
   }
   
   camouflage() {
-    // Move towards the player but occasionally hide or slow down
+    // Move towards the player with occasional slowdown or diversion
     let dir = createVector(player.x - this.x, player.y - this.y);
     dir.normalize();
-    this.x += dir.x * this.speed;
-    this.y += dir.y * this.speed;
+    // Random chance to divert
+    if (random(1) < 0.05) {
+      dir.x += random(-0.5, 0.5);
+      dir.y += random(-0.5, 0.5);
+      dir.normalize();
+    }
+    this.x += dir.x * this.currentSpeed;
+    this.y += dir.y * this.currentSpeed;
+  }
+  
+  zigzagMovement() {
+    // Move towards the player with a zigzag pattern
+    let dir = createVector(player.x - this.x, player.y - this.y);
+    dir.normalize();
+    // Apply zigzag oscillation perpendicular to the direction
+    let perpendicular = createVector(-dir.y, dir.x);
+    let zigzag = perpendicular.copy().mult(sin(this.oscillationAngle) * 0.5);
+    dir.add(zigzag);
+    dir.normalize();
+    this.x += dir.x * this.currentSpeed;
+    this.y += dir.y * this.currentSpeed;
+  }
+  
+  swarmingMovement() {
+    // Move in a swarming pattern, slightly cohesive
+    let dir = createVector(player.x - this.x, player.y - this.y);
+    dir.normalize();
+    // Add some cohesion with nearby opponents
+    let nearby = opponents.filter(op => op !== this && dist(this.x, this.y, op.x, op.y) < 100);
+    if (nearby.length > 0) {
+      let avgDir = createVector(0, 0);
+      nearby.forEach(op => {
+        avgDir.add(p5.Vector.sub(createVector(op.x, op.y), createVector(this.x, this.y)));
+      });
+      avgDir.div(nearby.length);
+      avgDir.normalize();
+      dir.add(avgDir.mult(0.1));
+      dir.normalize();
+    }
+    this.x += dir.x * this.currentSpeed;
+    this.y += dir.y * this.currentSpeed;
+  }
+  
+  slowSpreadMovement() {
+    // Move slowly and spread out over time
+    let dir = createVector(player.x - this.x, player.y - this.y);
+    dir.normalize();
+    this.x += dir.x * this.currentSpeed * 0.5; // Move slower
+    this.y += dir.y * this.currentSpeed * 0.5;
     
-    // Occasional slowdown or hiding can be implemented here
+    // Gradually spread out from the player
+    let spreadFactor = map(this.currentSpeed, this.baseSpeed * 0.5, this.maxSpeed, 0, 1);
+    this.x += random(-spreadFactor, spreadFactor);
+    this.y += random(-spreadFactor, spreadFactor);
   }
   
   hits(player) {
@@ -678,6 +695,9 @@ class ImmuneCellAssist {
       case 'TemporaryInvisibility':
         this.effect = 'invisibility';
         break;
+      case 'Temporary invincibility':
+        this.effect = 'invincibility';
+        break;
       default:
         this.isDone = true;
     }
@@ -699,6 +719,9 @@ class ImmuneCellAssist {
           break;
         case 'TemporaryInvisibility':
           // Implement invisibility removal
+          break;
+        case 'Temporary invincibility':
+          player.isInvincible = false;
           break;
         default:
           break;
@@ -728,11 +751,55 @@ class ImmuneCellAssist {
     if (this.effect === 'invisibility') {
       // Implement invisibility visuals
       push();
-      tint(255, 150);
+      noStroke();
+      fill(255, 255, 255, 100);
       ellipse(player.x, player.y, player.size + 10);
       pop();
     }
+    if (this.effect === 'invincibility') {
+      // Implement invincibility visuals
+      push();
+      noFill();
+      stroke(255, 0, 255);
+      ellipse(player.x, player.y, player.size + 30);
+      pop();
+    }
   }
+}
+
+// Function to load room data
+function loadRoom(roomData) {
+  currentRoom = roomData;
+  
+  // Load background image
+  loadImage(roomData.backgroundImageUrl, img => {
+    currentBackgroundImage = img;
+    roomLoaded = true;
+    loadOpponents(roomData);
+  }, () => {
+    console.error(`Failed to load background image: ${roomData.backgroundImageUrl}`);
+    roomLoaded = true; // Even if image fails, proceed to load opponents
+    loadOpponents(roomData);
+  });
+}
+
+// Load Opponents based on room data
+function loadOpponents(room) {
+  opponents = []; // Clear existing opponents
+  room.opponents.forEach(opponentType => {
+    for (let i = 0; i < opponentType.count; i++) {
+      opponents.push(new Opponent(opponentType.type, opponentType.movementPattern, opponentType.difficulty, room.roomId));
+    }
+  });
+  
+  // Reset Easter Egg Trigger
+  easterEggTriggered = false;
+  
+  // Reset immune cells
+  immuneCells = [];
+  
+  // Optionally, reset player position or other stats
+  player.resetPosition();
 }
 
 // Handle Key Presses
@@ -747,36 +814,22 @@ function checkEasterEgg() {
   let egg = currentRoom.easterEgg;
   if (egg && !easterEggTriggered) {
     // Implement trigger tasks based on room
-    // For simplicity, we'll assume the triggerTask is met when all opponents of a certain type are defeated
+    // For simplicity, we'll assume the triggerTask is met based on roomId and specific conditions
     switch(currentRoom.roomId) {
-      case 'lungs':
-        // "Destroy all viruses without missing any shots."
-        // Implement logic to check if all viruses are destroyed without missing
-        // For simplicity, trigger when no viruses remain
-        let viruses = opponents.filter(op => op.type === 'virus');
-        if (viruses.length === 0) {
-          triggerEasterEgg(egg.reward);
-          easterEggTriggered = true;
-        }
+      case 'lungs_alveoli_07':
+        // "Find the hidden antibody power-up among the capillaries."
+        // Implement logic to find and collect the power-up
+        // Not implemented in this example
         break;
-      case 'stomach':
+      case 'stomach_gastric_pit_03':
         // "Collect all digestive enzymes scattered around the room."
         // Implement logic to collect items
         // Not implemented in this example
         break;
-      case 'bloodstream':
+      case 'bloodstream_capillary_12':
         // "Defeat all pathogens within a time limit of 60 seconds."
         // Implement timer
         // Not implemented in this example
-        break;
-      case 'skin':
-        // "Identify and eliminate all allergens by targeting their unique markers."
-        // Implement logic to target specific enemies
-        let allergens = opponents.filter(op => op.type === 'allergen');
-        if (allergens.length === 0) {
-          triggerEasterEgg(egg.reward);
-          easterEggTriggered = true;
-        }
         break;
       default:
         break;
@@ -810,6 +863,9 @@ function getEasterEggDescription(reward) {
     case "TemporaryInvisibility":
       description = "You are now invisible to enemies for a short duration!";
       break;
+    case "Temporary invincibility":
+      description = "You are now invincible for a short duration!";
+      break;
     default:
       description = "You have received a reward!";
       break;
@@ -819,10 +875,10 @@ function getEasterEggDescription(reward) {
 
 // Display Health Bar
 function displayHealth() {
-  // Optional: If using HTML elements for health bar
+  // Update the health bar's width and color
   let healthBar = select('#health');
   if (healthBar) {
-    healthBar.style('width', player.health + '%');
+    healthBar.style('width', `${player.health}%`);
     if (player.health > 60) {
       healthBar.style('background-color', 'green');
     } else if (player.health > 30) {
@@ -845,8 +901,39 @@ function handleImmuneCells() {
     cell.update();
     cell.display();
   }
+  
+  // Example: Implement shield and invincibility effects
+  for (let cell of immuneCells) {
+    if (cell.effect === 'shield') {
+      // Implement shield logic, e.g., reduce damage or block attacks
+      // Not fully implemented in this example
+    }
+    if (cell.effect === 'invincibility') {
+      // Make player invincible
+      player.isInvincible = true;
+    }
+  }
 }
 
-// Optional: Implement Immune Cells effects on player or opponents
-// Not implemented in this example
+// Display Room Status
+function displayRoomStatus() {
+  // If all opponents are defeated, prompt player to move to a wall to transition
+  if (opponents.length === 0 && !loading) {
+    fill(255);
+    textSize(20);
+    textAlign(CENTER, CENTER);
+    text("All germs defeated!\nMove to a wall to proceed.", width / 2, 50);
+    
+    // Check if player is touching a wall
+    if (isPlayerAtWall()) {
+      transitionToNextRoom();
+    }
+  }
+}
 
+// Check if player is at any wall
+function isPlayerAtWall() {
+  let buffer = 20; // Distance from wall to trigger transition
+  return (player.x <= buffer || player.x >= width - buffer ||
+          player.y <= buffer || player.y >= height - buffer);
+}
