@@ -1,12 +1,15 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
+  <meta charset="UTF-8">
   <title>Dynamic City Exploration Game with Hand Control</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <!-- Leaflet CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet/dist/leaflet.css"
+  />
 
   <!-- Leaflet JavaScript -->
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -20,36 +23,44 @@
       margin: 0;
       padding: 0;
     }
+
     #controls {
       position: absolute;
       top: 10px;
       left: 50%;
       transform: translateX(-50%);
       z-index: 1000;
-      background: rgba(255, 255, 255, 0.8);
+      background: rgba(255, 255, 255, 0.9);
       padding: 10px 20px;
-      border-radius: 5px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.5);
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
     }
+
     #status {
       position: absolute;
       bottom: 10px;
       left: 50%;
       transform: translateX(-50%);
       z-index: 1000;
-      background: rgba(255, 255, 255, 0.8);
+      background: rgba(255, 255, 255, 0.9);
       padding: 10px 20px;
-      border-radius: 5px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.5);
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
       font-family: Arial, sans-serif;
       font-size: 14px;
+      text-align: center;
     }
-    /* Adjust the marker size */
-    .custom-marker {
-      width: 50px;
-      height: 100px;
-      transform: translate(-25px, -100px); /* Adjust to center the icon */
+
+    /* Custom player marker styling */
+    .player-marker {
+      width: 20px;
+      height: 20px;
+      background-color: red;
+      border: 2px solid white;
+      border-radius: 50%;
+      box-shadow: 0 0 3px rgba(0,0,0,0.5);
     }
+
     /* Video and Canvas styling */
     #videoContainer {
       position: absolute;
@@ -59,15 +70,17 @@
       height: 120px;
       z-index: 1000;
       border: 2px solid #ccc;
-      border-radius: 5px;
+      border-radius: 8px;
       overflow: hidden;
       background: #000;
     }
+
     #video {
       width: 100%;
       height: 100%;
       transform: scaleX(-1); /* Mirror the video for natural interaction */
     }
+
     #overlay {
       position: absolute;
       top: 0;
@@ -81,10 +94,10 @@
 <body>
 
   <div id="controls">
-    <button onclick="startGame()">Start Game</button>
+    <button onclick="startGame()" style="padding: 8px 16px; font-size: 16px;">Start Game</button>
   </div>
 
-  <div id="status">Click "Start Game" to begin.</div>
+  <div id="status">Press "Start Game" to begin.</div>
 
   <div id="videoContainer">
     <video id="video" autoplay muted playsinline></video>
@@ -94,42 +107,34 @@
   <div id="map"></div>
 
   <script>
-    // Global variables
-    var map;
-    var playerMarker;
-    var nodes = {};
-    var edges = {};
-    var currentNodeId;
-    var targetNodeId;
-    var loadedAreas = []; // Keep track of loaded bounding boxes
-    var loadingData = false; // Flag to prevent multiple data loads
-    var dataFetchThreshold = 0.002; // Threshold distance to edge (in degrees)
-    var movementInterval = null; // Interval for continuous movement
-    var previousDirection = null; // Store the previous movement direction
+    // Initialize the map
+    let map;
+    let playerMarker;
+    let targetMarker;
+    let nodes = {};
+    let edges = {};
+    let currentNodeId;
+    let targetNodeId;
+    let loadedAreas = [];
+    let loadingData = false;
+    const dataFetchThreshold = 0.002;
+    let isMoving = false;
 
-    // Variables for handpose
-    let video;
-    let canvas;
+    // Handpose variables
+    let videoElement;
+    let canvasElement;
     let ctx;
     let handposeModel;
     let predictions = [];
     let currentZone = 'center';
-    const moveCooldown = 250; // Cooldown time between movements (in milliseconds)
+    let lastMoveTime = 0;
 
-    // SVG icon content
-    var playerSVG = `
-      <svg width="50" height="100" viewBox="0 0 200 400" xmlns="http://www.w3.org/2000/svg">
-        <!-- Example SVG: A simple icon with a circle and rectangle -->
-        <circle cx="100" cy="80" r="50" fill="#FF5733" />
-        <rect x="75" y="150" width="50" height="200" fill="#33C1FF" />
-      </svg>
-    `;
+    // Cooldown to prevent rapid movements
+    const MOVE_COOLDOWN = 500; // milliseconds
 
     // Initialize the map
     function initMap() {
-      // Center of the map (latitude, longitude)
-      var center = [51.505, -0.09]; // Example: London coordinates
-
+      const center = [50.7220, -1.8667]; // Example: London coordinates
       map = L.map('map').setView(center, 16);
 
       // Add OpenStreetMap tile layer
@@ -140,7 +145,7 @@
 
     // Fetch street data from OpenStreetMap
     function fetchStreetData(bbox, callback) {
-      var query = `
+      const query = `
         [out:json][timeout:25];
         (
           way["highway"](${bbox.join(',')});
@@ -156,13 +161,11 @@
           'Content-Type': 'application/x-www-form-urlencoded'
         },
       })
-        .then((response) => response.json())
-        .then((data) => {
-          callback(data);
-        })
-        .catch((error) => {
-          console.error('Error fetching OSM data:', error);
-        });
+      .then(response => response.json())
+      .then(data => callback(data))
+      .catch(error => {
+        console.error('Error fetching OSM data:', error);
+      });
     }
 
     // Check if a point is within a bounding box
@@ -172,44 +175,41 @@
 
     // Check if the player is near the edge of the loaded area
     function checkPlayerPosition() {
-      var playerNode = nodes[currentNodeId];
-      var currentBBox = loadedAreas[loadedAreas.length - 1];
+      const playerNode = nodes[currentNodeId];
+      const currentBBox = loadedAreas[loadedAreas.length - 1];
 
-      // Calculate the distance to the edges
-      var lat = playerNode.lat;
-      var lon = playerNode.lon;
-      var buffer = dataFetchThreshold;
+      const { lat, lon } = playerNode;
+      const buffer = dataFetchThreshold;
 
-      if (lat - buffer <= currentBBox[0] || lat + buffer >= currentBBox[2] ||
-          lon - buffer <= currentBBox[1] || lon + buffer >= currentBBox[3]) {
+      if (
+        lat - buffer <= currentBBox[0] ||
+        lat + buffer >= currentBBox[2] ||
+        lon - buffer <= currentBBox[1] ||
+        lon + buffer >= currentBBox[3]
+      ) {
         loadAdditionalData(lat, lon);
       }
     }
 
     // Load additional data when player nears the edge
     function loadAdditionalData(lat, lon) {
-      if (loadingData) return; // Prevent multiple simultaneous loads
+      if (loadingData) return;
       loadingData = true;
 
-      var bboxSize = 0.01; // Size of the new bounding box
-      var bbox = [
+      const bboxSize = 0.01;
+      const bbox = [
         lat - bboxSize / 2,
         lon - bboxSize / 2,
         lat + bboxSize / 2,
         lon + bboxSize / 2,
       ];
 
-      // Check if this area has already been loaded
-      for (var i = 0; i < loadedAreas.length; i++) {
-        var area = loadedAreas[i];
-        if (isBBoxEqual(area, bbox)) {
-          loadingData = false;
-          return;
-        }
+      if (loadedAreas.some(area => isBBoxEqual(area, bbox))) {
+        loadingData = false;
+        return;
       }
 
-      // Fetch new data
-      fetchStreetData(bbox, function (osmData) {
+      fetchStreetData(bbox, osmData => {
         processStreetData(osmData);
         loadedAreas.push(bbox);
         loadingData = false;
@@ -218,27 +218,25 @@
 
     // Utility function to compare bounding boxes
     function isBBoxEqual(bbox1, bbox2) {
-      return bbox1[0] === bbox2[0] && bbox1[1] === bbox2[1] &&
-             bbox1[2] === bbox2[2] && bbox1[3] === bbox2[3];
+      return bbox1.every((val, index) => val === bbox2[index]);
     }
 
     // Process OSM data into nodes and edges
     function processStreetData(osmData) {
-      // Store the existing node IDs to prevent duplicates
-      var existingNodeIds = new Set(Object.keys(nodes));
+      const existingNodeIds = new Set(Object.keys(nodes));
 
-      osmData.elements.forEach((element) => {
+      osmData.elements.forEach(element => {
         if (element.type === 'node' && !nodes[element.id]) {
           nodes[element.id] = { id: element.id, lat: element.lat, lon: element.lon, neighbors: [] };
         }
       });
 
-      osmData.elements.forEach((element) => {
+      osmData.elements.forEach(element => {
         if (element.type === 'way') {
           const nodeRefs = element.nodes;
           for (let i = 0; i < nodeRefs.length - 1; i++) {
-            let from = nodeRefs[i];
-            let to = nodeRefs[i + 1];
+            const from = nodeRefs[i];
+            const to = nodeRefs[i + 1];
 
             if (!edges[from]) edges[from] = [];
             if (!edges[to]) edges[to] = [];
@@ -246,9 +244,7 @@
             edges[from].push(to);
             edges[to].push(from);
 
-            // Ensure nodes exist before accessing
             if (nodes[from] && nodes[to]) {
-              // Prevent duplicate neighbors
               if (!nodes[from].neighbors.includes(to)) {
                 nodes[from].neighbors.push(to);
               }
@@ -274,37 +270,33 @@
       // Place player and target if not already placed
       if (!playerMarker) {
         placePlayer();
-        // Start handpose after player is placed
         setupHandpose();
       }
     }
 
     // Place player and target on the map
     function placePlayer() {
-      var nodeIds = Object.keys(nodes);
+      const nodeIds = Object.keys(nodes);
       if (nodeIds.length === 0) {
         console.error('No nodes available to place the player.');
         return;
       }
+
       currentNodeId = nodeIds[Math.floor(Math.random() * nodeIds.length)];
       targetNodeId = nodeIds[Math.floor(Math.random() * nodeIds.length)];
 
-      // Create custom icon using DivIcon
-      var playerIcon = L.divIcon({
-        className: 'custom-marker',
-        html: playerSVG,
-        iconSize: [50, 100],
-        iconAnchor: [25, 100], // Adjust the anchor to the bottom center
+      // Create custom circular icon
+      const playerIcon = L.divIcon({
+        className: 'player-marker',
       });
 
-      // Place player marker with custom SVG icon
       playerMarker = L.marker([nodes[currentNodeId].lat, nodes[currentNodeId].lon], {
         title: 'Player',
         icon: playerIcon,
       }).addTo(map);
 
-      // Place target marker
-      L.marker([nodes[targetNodeId].lat, nodes[targetNodeId].lon], {
+      // Create target marker
+      targetMarker = L.marker([nodes[targetNodeId].lat, nodes[targetNodeId].lon], {
         title: 'Destination',
         icon: L.icon({
           iconUrl: 'https://leafletjs.com/examples/custom-icons/leaf-green.png',
@@ -315,30 +307,27 @@
       }).addTo(map);
 
       map.setView([nodes[currentNodeId].lat, nodes[currentNodeId].lon], 17);
-
-      // Update status
-      document.getElementById('status').innerHTML = 'Use your palm to navigate. Reach the destination!';
+      document.getElementById('status').textContent = 'Use your palm to navigate. Reach the destination!';
     }
 
     // Animate marker movement along the path
     function animateMovement(startLatLng, endLatLng, duration, callback) {
-      var startTime = null;
+      const startTime = performance.now();
 
-      function animate(timestamp) {
-        if (!startTime) startTime = timestamp;
-        var elapsed = timestamp - startTime;
-        var progress = Math.min(elapsed / duration, 1);
+      function animate(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
 
-        var currentLat = startLatLng.lat + (endLatLng.lat - startLatLng.lat) * progress;
-        var currentLng = startLatLng.lng + (endLatLng.lng - startLatLng.lng) * progress;
+        const currentLat = startLatLng.lat + (endLatLng.lat - startLatLng.lat) * progress;
+        const currentLng = startLatLng.lng + (endLatLng.lng - startLatLng.lng) * progress;
 
         playerMarker.setLatLng([currentLat, currentLng]);
         map.panTo([currentLat, currentLng], { animate: false });
 
         if (progress < 1) {
           requestAnimationFrame(animate);
-        } else {
-          if (callback) callback();
+        } else if (callback) {
+          callback();
         }
       }
 
@@ -347,33 +336,39 @@
 
     // Handle player movement based on direction
     function handleMovement(direction) {
+      if (isMoving) return;
+
       if (!currentNodeId || !nodes[currentNodeId]) {
         console.error('Player position is not initialized.');
         return;
       }
 
-      var neighbors = nodes[currentNodeId].neighbors;
-      var currentNode = nodes[currentNodeId];
-      var nextNodeId = null;
-      var minAngleDiff = Infinity;
+      const neighbors = nodes[currentNodeId].neighbors;
+      if (neighbors.length === 0) return;
 
-      // Determine the angle for the direction
-      var directionAngle;
+      const currentNode = nodes[currentNodeId];
+      let nextNodeId = null;
+      let minAngleDiff = Infinity;
 
-      if (direction === 'left') directionAngle = Math.PI;
-      else if (direction === 'up') directionAngle = -Math.PI / 2;
-      else if (direction === 'right') directionAngle = 0;
-      else if (direction === 'down') directionAngle = Math.PI / 2;
-      else return;
+      // Define direction angles in radians
+      const directionAngles = {
+        'left': Math.PI,
+        'up': -Math.PI / 2,
+        'right': 0,
+        'down': Math.PI / 2
+      };
+
+      const directionAngle = directionAngles[direction];
+      if (directionAngle === undefined) return;
 
       // Find the neighbor closest to the desired direction
-      neighbors.forEach((neighborId) => {
-        var neighborNode = nodes[neighborId];
-        var dx = neighborNode.lon - currentNode.lon;
-        var dy = neighborNode.lat - currentNode.lat;
-        var angle = Math.atan2(dy, dx);
+      neighbors.forEach(neighborId => {
+        const neighbor = nodes[neighborId];
+        const dx = neighbor.lon - currentNode.lon;
+        const dy = neighbor.lat - currentNode.lat;
+        const angle = Math.atan2(dy, dx);
 
-        var angleDiff = Math.abs(angle - directionAngle);
+        let angleDiff = Math.abs(angle - directionAngle);
         if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
 
         if (angleDiff < minAngleDiff) {
@@ -382,46 +377,47 @@
         }
       });
 
-      // Move to the next node if one is found
       if (nextNodeId) {
-        isMoving = true; // Set the movement flag
-        var nextNode = nodes[nextNodeId];
-        var startLatLng = L.latLng(currentNode.lat, currentNode.lon);
-        var endLatLng = L.latLng(nextNode.lat, nextNode.lon);
+        isMoving = true;
+        const nextNode = nodes[nextNodeId];
+        const startLatLng = L.latLng(currentNode.lat, currentNode.lon);
+        const endLatLng = L.latLng(nextNode.lat, nextNode.lon);
 
-        // Animate the movement over 500 milliseconds
-        animateMovement(startLatLng, endLatLng, 500, function() {
+        animateMovement(startLatLng, endLatLng, 500, () => {
           currentNodeId = nextNodeId;
-          isMoving = false; // Reset the movement flag
+          isMoving = false;
           checkWinCondition();
           checkPlayerPosition();
         });
       }
     }
 
-    // Move player continuously based on currentZone
-    function continuousMove() {
-      if (currentZone !== 'center') {
-        handleMovement(currentZone);
+    // Move player if enough time has passed
+    function movePlayer(direction) {
+      const now = Date.now();
+
+      if (now - lastMoveTime > MOVE_COOLDOWN) {
+        lastMoveTime = now;
+        handleMovement(direction);
       }
     }
 
     // Set up the handpose model
     function setupHandpose() {
-      video = document.getElementById('video');
-      canvas = document.getElementById('overlay');
-      ctx = canvas.getContext('2d');
+      videoElement = document.getElementById('video');
+      canvasElement = document.getElementById('overlay');
+      ctx = canvasElement.getContext('2d');
 
       navigator.mediaDevices.getUserMedia({ video: true })
         .then(stream => {
-          video.srcObject = stream;
-          video.play();
+          videoElement.srcObject = stream;
+          videoElement.play();
 
-          video.onloadeddata = () => {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
+          videoElement.onloadeddata = () => {
+            canvasElement.width = videoElement.videoWidth;
+            canvasElement.height = videoElement.videoHeight;
 
-            handposeModel = ml5.handpose(video, modelReady);
+            handposeModel = ml5.handpose(videoElement, modelReady);
 
             handposeModel.on('predict', results => {
               predictions = results;
@@ -430,6 +426,7 @@
         })
         .catch(err => {
           console.error('Error accessing webcam: ', err);
+          document.getElementById('status').textContent = 'Error accessing webcam. Please allow camera access.';
         });
     }
 
@@ -440,102 +437,94 @@
 
     // Process hand data and control movement
     function processHandData() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.clearRect(0, 0, canvasElement.width, canvasElement.height);
 
       if (predictions.length > 0) {
         const prediction = predictions[0];
         const landmarks = prediction.landmarks;
 
         drawHand(landmarks);
+        const palmPosition = landmarks[0]; // Wrist position
 
-        // Use palm position (wrist position)
-        const palmPosition = landmarks[0]; // Wrist is considered the base of the palm
-
-        handleHandMovement(palmPosition);
-      } else {
-        // If no hand is detected, reset to center
-        currentZone = 'center';
-        if (movementInterval) {
-          clearInterval(movementInterval);
-          movementInterval = null;
-          previousDirection = null;
-        }
+        // **New Implementation for Palm Tilt Detection**
+        detectPalmTilt(landmarks);
       }
 
       requestAnimationFrame(processHandData);
     }
 
+    // Function to detect palm tilt and determine direction
+    function detectPalmTilt(landmarks) {
+      // Extract necessary landmarks
+      const wrist = landmarks[0];
+      const middleFingerTip = landmarks[12]; // Landmark 12 is the tip of the middle finger
+
+      // Calculate differences
+      const deltaX = middleFingerTip[0] - wrist[0];
+      const deltaY = wrist[1] - middleFingerTip[1]; // Invert Y-axis for correct angle
+
+      // Calculate angle in degrees
+      const angleRad = Math.atan2(deltaY, deltaX);
+      let angleDeg = angleRad * (180 / Math.PI);
+
+      // Normalize angle to [0, 360)
+      if (angleDeg < 0) {
+        angleDeg += 360;
+      }
+
+      // Define angle thresholds for directions
+      // Adjust these thresholds as needed based on testing
+      const directionThresholds = {
+        'up': { min: 45, max: 135 },
+        'right': { min: 315, max: 360 },
+        'right_ext': { min: 0, max: 45 }, // Combining for right
+        'down': { min: 225, max: 315 },
+        'left': { min: 135, max: 225 }
+      };
+
+      let detectedDirection = null;
+
+      if (angleDeg >= directionThresholds['up'].min && angleDeg < directionThresholds['up'].max) {
+        detectedDirection = 'up';
+      } else if (
+        (angleDeg >= directionThresholds['right'].min && angleDeg < directionThresholds['right'].max) ||
+        (angleDeg >= directionThresholds['right_ext'].min && angleDeg < directionThresholds['right_ext'].max)
+      ) {
+        detectedDirection = 'right';
+      } else if (angleDeg >= directionThresholds['down'].min && angleDeg < directionThresholds['down'].max) {
+        detectedDirection = 'down';
+      } else if (angleDeg >= directionThresholds['left'].min && angleDeg < directionThresholds['left'].max) {
+        detectedDirection = 'left';
+      }
+
+      // Debugging: Display angle and direction
+      // Uncomment the following line to see the angle and direction on the canvas
+      // ctx.fillText(`Angle: ${Math.round(angleDeg)}°, Dir: ${detectedDirection || 'None'}`, 10, 20);
+
+      if (detectedDirection) {
+        movePlayer(detectedDirection);
+      }
+    }
+
     function handleHandMovement(palmPosition) {
-      const x = palmPosition[0];
-      const y = palmPosition[1];
-
-      const videoWidth = video.videoWidth;
-      const videoHeight = video.videoHeight;
-
-      // Define control box dimensions (central area of the video)
-      const boxWidth = videoWidth * 0.6;
-      const boxHeight = videoHeight * 0.6;
-      const xBoxStart = (videoWidth - boxWidth) / 2;
-      const yBoxStart = (videoHeight - boxHeight) / 2;
-
-      // Calculate relative position within the control box
-      const xRelative = (x - xBoxStart) / boxWidth;
-      const yRelative = (y - yBoxStart) / boxHeight;
-
-      let newZone = 'center';
-
-      // Determine direction based on palm position
-      if (xRelative < 0.33) {
-        newZone = 'left';
-      } else if (xRelative > 0.66) {
-        newZone = 'right';
-      } else if (yRelative < 0.33) {
-        newZone = 'up';
-      } else if (yRelative > 0.66) {
-        newZone = 'down';
-      }
-
-      // Update currentZone
-      currentZone = newZone;
-
-      // If in a direction zone, initiate or continue movement
-      if (currentZone !== 'center') {
-        if (previousDirection !== currentZone) {
-          // If direction has changed, clear previous interval and start a new one
-          if (movementInterval) {
-            clearInterval(movementInterval);
-          }
-          movementInterval = setInterval(continuousMove, moveCooldown);
-          previousDirection = currentZone;
-        }
-      } else {
-        // If in center, stop moving
-        if (movementInterval) {
-          clearInterval(movementInterval);
-          movementInterval = null;
-          previousDirection = null;
-        }
-      }
-
-      // Optional: Draw control box for visual reference
-      ctx.strokeStyle = 'green';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(xBoxStart, yBoxStart, boxWidth, boxHeight);
+      // This function is now deprecated by detectPalmTilt
+      // It can be removed or repurposed if needed
     }
 
     function drawHand(landmarks) {
       ctx.strokeStyle = 'red';
       ctx.lineWidth = 2;
 
-      // Draw lines between points
+      // Define finger connections
       const fingers = [
-        [0, 1, 2, 3, 4], // Thumb
-        [0, 5, 6, 7, 8], // Index finger
-        [0, 9, 10, 11, 12], // Middle finger
+        [0, 1, 2, 3, 4],     // Thumb
+        [0, 5, 6, 7, 8],     // Index finger
+        [0, 9, 10, 11, 12],  // Middle finger
         [0, 13, 14, 15, 16], // Ring finger
-        [0, 17, 18, 19, 20] // Pinky
+        [0, 17, 18, 19, 20]  // Pinky
       ];
 
+      // Draw finger lines
       fingers.forEach(finger => {
         for (let i = 0; i < finger.length - 1; i++) {
           const start = landmarks[finger[i]];
@@ -548,7 +537,7 @@
         }
       });
 
-      // Draw points
+      // Draw landmarks
       landmarks.forEach(point => {
         ctx.beginPath();
         ctx.arc(point[0], point[1], 4, 0, 2 * Math.PI);
@@ -560,14 +549,9 @@
     // Check if the player has reached the destination
     function checkWinCondition() {
       if (currentNodeId === targetNodeId) {
-        // Stop processing hand data and movement
+        // Stop processing hand data
         predictions = [];
-        document.getElementById('status').innerHTML = 'You have reached your destination! Game Over.';
-        if (movementInterval) {
-          clearInterval(movementInterval);
-          movementInterval = null;
-          previousDirection = null;
-        }
+        document.getElementById('status').textContent = 'You have reached your destination! Game Over.';
       }
     }
 
@@ -577,15 +561,21 @@
       nodes = {};
       edges = {};
       loadedAreas = [];
-      playerMarker = null;
-      movementInterval = null;
+      if (playerMarker) {
+        map.removeLayer(playerMarker);
+        playerMarker = null;
+      }
+      if (targetMarker) {
+        map.removeLayer(targetMarker);
+        targetMarker = null;
+      }
+      isMoving = false;
       currentZone = 'center';
       lastMoveTime = 0;
       predictions = [];
-      previousDirection = null;
 
-      // Remove existing layers
-      map.eachLayer(function (layer) {
+      // Remove existing polyline layers
+      map.eachLayer(layer => {
         if (layer instanceof L.Polyline || layer instanceof L.Marker) {
           map.removeLayer(layer);
         }
@@ -597,21 +587,21 @@
       }).addTo(map);
 
       // Fetch initial street data
-      var center = map.getCenter();
-      var bboxSize = 0.01;
-      var bbox = [
+      const center = map.getCenter();
+      const bboxSize = 0.01;
+      const bbox = [
         center.lat - bboxSize / 2,
         center.lng - bboxSize / 2,
         center.lat + bboxSize / 2,
         center.lng + bboxSize / 2,
       ];
 
-      fetchStreetData(bbox, function (osmData) {
+      fetchStreetData(bbox, osmData => {
         processStreetData(osmData);
         loadedAreas.push(bbox);
       });
 
-      document.getElementById('status').innerHTML = 'Loading map...';
+      document.getElementById('status').textContent = 'Loading map...';
     }
 
     // Initialize the map on window load
