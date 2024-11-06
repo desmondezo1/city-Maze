@@ -61,6 +61,16 @@
       box-shadow: 0 0 3px rgba(0,0,0,0.5);
     }
 
+    /* New: Custom opponent marker styling (Blue Circle) */
+    .opponent-marker {
+      width: 20px;
+      height: 20px;
+      background-color: blue;
+      border: 2px solid white;
+      border-radius: 50%;
+      box-shadow: 0 0 3px rgba(0,0,0,0.5);
+    }
+
     /* New: Custom win marker styling (Green Triangle) */
     .win-marker {
       width: 0;
@@ -104,7 +114,8 @@
 <body>
 
   <div id="controls">
-    <button onclick="startGame()" style="padding: 8px 16px; font-size: 16px;">Start Game</button>
+    <!-- Updated Button: Toggle Start/Stop Game -->
+    <button id="startStopButton" onclick="toggleGame()" style="padding: 8px 16px; font-size: 16px;">Start Game</button>
   </div>
 
   <div id="status">Press "Start Game" to begin.</div>
@@ -141,11 +152,19 @@
     let currentZone = 'center';
     let lastMoveTime = 0;
 
+    // New: Game state variables
+    let opponents = []; // Array to hold opponent objects
+    let opponentMovementInterval; // Interval ID for opponents' movement
+    let gameRunning = false; // Game state
+
     // Cooldown to prevent rapid movements
     const MOVE_COOLDOWN = 500; // milliseconds
 
     // Win condition radius in meters
     const WIN_RADIUS = 10; // Adjust as needed
+
+    // Collision detection radius in meters
+    const COLLISION_RADIUS = 10; // Adjust as needed
 
     // Initialize the map
     function initMap() {
@@ -297,9 +316,17 @@
         return;
       }
 
-      currentNodeId = nodeIds[Math.floor(Math.random() * nodeIds.length)];
-      targetNodeId = nodeIds[Math.floor(Math.random() * nodeIds.length)];
-      winNodeId = nodeIds[Math.floor(Math.random() * nodeIds.length)]; // New: Select win node
+      // Ensure that target and win nodes are not the same as player
+      const availableNodes = nodeIds.slice(); // Clone the array
+
+      // Select player node
+      currentNodeId = availableNodes.splice(Math.floor(Math.random() * availableNodes.length), 1)[0];
+
+      // Select target node
+      targetNodeId = availableNodes.splice(Math.floor(Math.random() * availableNodes.length), 1)[0];
+
+      // Select win node
+      winNodeId = availableNodes.splice(Math.floor(Math.random() * availableNodes.length), 1)[0];
 
       // Create custom circular icon for player
       const playerIcon = L.divIcon({
@@ -322,7 +349,7 @@
         }),
       }).addTo(map);
 
-      // New: Create win marker (Green Triangle)
+      // Create win marker (Green Triangle)
       const winIcon = L.divIcon({
         className: 'win-marker',
         iconSize: [20, 20], // Adjust size as needed
@@ -472,7 +499,6 @@
         const landmarks = prediction.landmarks;
 
         drawHand(landmarks);
-        // const palmPosition = landmarks[0]; // Wrist position (No longer used)
 
         // **New Implementation for Palm Tilt Detection**
         detectPalmTilt(landmarks);
@@ -569,13 +595,14 @@
       });
     }
 
-    // **New: Function to check win condition based on proximity to winMarker**
+    // **New: Function to check win condition based on proximity to winMarker and collision with opponents**
     function checkWinCondition() {
       // Existing condition: Reached targetNodeId
       if (currentNodeId === targetNodeId) {
         // Stop processing hand data
         predictions = [];
         document.getElementById('status').textContent = 'You have reached your destination! Game Over.';
+        stopGame();
         return;
       }
 
@@ -583,19 +610,46 @@
       const playerLatLng = playerMarker.getLatLng();
       const winLatLng = winMarker.getLatLng();
 
-      const distance = playerLatLng.distanceTo(winLatLng); // Distance in meters
+      const distanceToWin = playerLatLng.distanceTo(winLatLng); // Distance in meters
 
-      if (distance <= WIN_RADIUS) {
+      if (distanceToWin <= WIN_RADIUS) {
         // Stop processing hand data
         predictions = [];
         document.getElementById('status').textContent = 'Congratulations! You have reached the win destination! Game Over.';
-        // Optionally, you can remove the winMarker or perform other actions
-        // map.removeLayer(winMarker);
+        stopGame();
+        return;
+      }
+
+      // **New: Check collision with opponents**
+      opponents.forEach(opponent => {
+        const opponentLatLng = opponent.marker.getLatLng();
+        const distanceToPlayer = playerLatLng.distanceTo(opponentLatLng); // Distance in meters
+
+        if (distanceToPlayer <= COLLISION_RADIUS) {
+          // Player dies
+          predictions = [];
+          document.getElementById('status').textContent = 'Oh no! An opponent has caught you. Game Over.';
+          stopGame();
+        }
+      });
+    }
+
+    // **New: Function to toggle the game state (Start/Stop)**
+    function toggleGame() {
+      if (!gameRunning) {
+        startGame();
+      } else {
+        stopGame();
       }
     }
 
-    // Start the game
+    // **New: Function to start the game**
     function startGame() {
+      gameRunning = true;
+
+      // Update button text to "Stop Game"
+      document.getElementById('startStopButton').textContent = 'Stop Game';
+
       // Reset variables
       nodes = {};
       edges = {};
@@ -608,10 +662,17 @@
         map.removeLayer(targetMarker);
         targetMarker = null;
       }
-      if (winMarker) { // New: Remove existing winMarker if any
+      if (winMarker) { // Remove existing winMarker if any
         map.removeLayer(winMarker);
         winMarker = null;
       }
+
+      // Remove existing opponents if any
+      opponents.forEach(opponent => {
+        map.removeLayer(opponent.marker);
+      });
+      opponents = [];
+
       isMoving = false;
       currentZone = 'center';
       lastMoveTime = 0;
@@ -642,6 +703,238 @@
       fetchStreetData(bbox, osmData => {
         processStreetData(osmData);
         loadedAreas.push(bbox);
+        spawnOpponents(); // New: Spawn opponents after initial data is loaded
+      });
+
+      document.getElementById('status').textContent = 'Loading map...';
+    }
+
+    // **New: Function to stop the game**
+    function stopGame() {
+      gameRunning = false;
+
+      // Update button text to "Start Game"
+      document.getElementById('startStopButton').textContent = 'Start Game';
+
+      // Remove opponents from the map
+      opponents.forEach(opponent => {
+        map.removeLayer(opponent.marker);
+      });
+      opponents = [];
+
+      // Clear opponents' movement interval
+      if (opponentMovementInterval) {
+        clearInterval(opponentMovementInterval);
+        opponentMovementInterval = null;
+      }
+
+      // Reset game state
+      isMoving = false;
+      currentZone = 'center';
+      lastMoveTime = 0;
+      predictions = [];
+
+      document.getElementById('status').textContent = 'Press "Start Game" to begin.';
+    }
+
+    // **New: Function to spawn opponents**
+    function spawnOpponents() {
+      const nodeIds = Object.keys(nodes);
+      const maxOpponents = 5; // Maximum number of opponents
+      const minOpponents = 3; // Minimum number of opponents
+      const numberOfOpponents = Math.floor(Math.random() * (maxOpponents - minOpponents + 1)) + minOpponents;
+
+      for (let i = 0; i < numberOfOpponents; i++) {
+        // Select a random node for the opponent, ensuring it's not the player, target, or win node
+        const availableNodes = nodeIds.filter(id => id !== currentNodeId && id !== targetNodeId && id !== winNodeId);
+        if (availableNodes.length === 0) break; // No available nodes
+
+        const opponentNodeId = availableNodes[Math.floor(Math.random() * availableNodes.length)];
+
+        // Create opponent marker
+        const opponentIcon = L.divIcon({
+          className: 'opponent-marker',
+        });
+
+        const opponentMarker = L.marker([nodes[opponentNodeId].lat, nodes[opponentNodeId].lon], {
+          title: `Opponent ${i + 1}`,
+          icon: opponentIcon,
+        }).addTo(map);
+
+        opponents.push({
+          marker: opponentMarker,
+          currentNodeId: opponentNodeId
+        });
+      }
+
+      // Start opponents' movement
+      opponentMovementInterval = setInterval(moveOpponents, 1000); // Move opponents every 1 second
+    }
+
+    // **New: Function to move opponents towards the player**
+    function moveOpponents() {
+      opponents.forEach(opponent => {
+        if (!opponent.currentNodeId || !nodes[opponent.currentNodeId]) return;
+
+        const playerLat = nodes[currentNodeId].lat;
+        const playerLon = nodes[currentNodeId].lon;
+        const opponentLat = nodes[opponent.currentNodeId].lat;
+        const opponentLon = nodes[opponent.currentNodeId].lon;
+
+        // Find the neighbor that is closest to the player
+        const neighbors = nodes[opponent.currentNodeId].neighbors;
+        let nextNodeId = null;
+        let minDistance = Infinity;
+
+        neighbors.forEach(neighborId => {
+          const neighbor = nodes[neighborId];
+          const distance = getDistance(playerLat, playerLon, neighbor.lat, neighbor.lon);
+          if (distance < minDistance) {
+            minDistance = distance;
+            nextNodeId = neighborId;
+          }
+        });
+
+        if (nextNodeId) {
+          // Move opponent to the next node
+          opponent.currentNodeId = nextNodeId;
+          const newLatLng = [nodes[nextNodeId].lat, nodes[nextNodeId].lon];
+          opponent.marker.setLatLng(newLatLng);
+        }
+      });
+
+      // After moving all opponents, check for collisions
+      checkWinCondition();
+    }
+
+    // **New: Utility function to calculate distance between two coordinates in meters**
+    function getDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371e3; // Earth's radius in meters
+      const φ1 = lat1 * Math.PI/180;
+      const φ2 = lat2 * Math.PI/180;
+      const Δφ = (lat2-lat1) * Math.PI/180;
+      const Δλ = (lon2-lon1) * Math.PI/180;
+
+      const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                Math.cos(φ1) * Math.cos(φ2) *
+                Math.sin(Δλ/2) * Math.sin(Δλ/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+      const d = R * c;
+      return d;
+    }
+
+    // **New: Function to stop opponents' movement and remove them from the map**
+    function removeOpponents() {
+      opponents.forEach(opponent => {
+        map.removeLayer(opponent.marker);
+      });
+      opponents = [];
+      if (opponentMovementInterval) {
+        clearInterval(opponentMovementInterval);
+        opponentMovementInterval = null;
+      }
+    }
+
+    // **New: Modify the stopGame function to include removing opponents**
+    function stopGame() {
+      gameRunning = false;
+
+      // Update button text to "Start Game"
+      document.getElementById('startStopButton').textContent = 'Start Game';
+
+      // Remove player, target, and win markers from the map
+      if (playerMarker) {
+        map.removeLayer(playerMarker);
+        playerMarker = null;
+      }
+      if (targetMarker) {
+        map.removeLayer(targetMarker);
+        targetMarker = null;
+      }
+      if (winMarker) { // Remove existing winMarker if any
+        map.removeLayer(winMarker);
+        winMarker = null;
+      }
+
+      // Remove opponents from the map
+      removeOpponents();
+
+      isMoving = false;
+      currentZone = 'center';
+      lastMoveTime = 0;
+      predictions = [];
+
+      document.getElementById('status').textContent = 'Press "Start Game" to begin.';
+    }
+
+    // **Optional: Function to handle player death (if you want to customize further)**
+    function handlePlayerDeath(message) {
+      document.getElementById('status').textContent = message;
+      stopGame();
+    }
+
+    // Start the game
+    function startGame() {
+      gameRunning = true;
+
+      // Update button text to "Stop Game"
+      document.getElementById('startStopButton').textContent = 'Stop Game';
+
+      // Reset variables
+      nodes = {};
+      edges = {};
+      loadedAreas = [];
+      if (playerMarker) {
+        map.removeLayer(playerMarker);
+        playerMarker = null;
+      }
+      if (targetMarker) {
+        map.removeLayer(targetMarker);
+        targetMarker = null;
+      }
+      if (winMarker) { // Remove existing winMarker if any
+        map.removeLayer(winMarker);
+        winMarker = null;
+      }
+
+      // Remove existing opponents if any
+      opponents.forEach(opponent => {
+        map.removeLayer(opponent.marker);
+      });
+      opponents = [];
+
+      isMoving = false;
+      currentZone = 'center';
+      lastMoveTime = 0;
+      predictions = [];
+
+      // Remove existing polyline layers
+      map.eachLayer(layer => {
+        if (layer instanceof L.Polyline || layer instanceof L.Marker) {
+          map.removeLayer(layer);
+        }
+      });
+
+      // Add tile layer back
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+      }).addTo(map);
+
+      // Fetch initial street data
+      const center = map.getCenter();
+      const bboxSize = 0.01;
+      const bbox = [
+        center.lat - bboxSize / 2,
+        center.lng - bboxSize / 2,
+        center.lat + bboxSize / 2,
+        center.lng + bboxSize / 2,
+      ];
+
+      fetchStreetData(bbox, osmData => {
+        processStreetData(osmData);
+        loadedAreas.push(bbox);
+        spawnOpponents(); // Spawn opponents after initial data is loaded
       });
 
       document.getElementById('status').textContent = 'Loading map...';
