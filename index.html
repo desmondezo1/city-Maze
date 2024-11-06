@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>City Exploration Game</title>
+  <title>Dynamic City Exploration Game</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <!-- Leaflet CSS -->
@@ -60,7 +60,9 @@
     var edges = {};
     var currentNodeId;
     var targetNodeId;
-    var visitedNodes = new Set();
+    var loadedAreas = []; // Keep track of loaded bounding boxes
+    var loadingData = false; // Flag to prevent multiple data loads
+    var dataFetchThreshold = 0.002; // Threshold distance to edge (in degrees)
 
     // Initialize the map
     function initMap() {
@@ -102,10 +104,70 @@
         });
     }
 
+    // Check if a point is within a bounding box
+    function isPointInBBox(lat, lon, bbox) {
+      return lat >= bbox[0] && lat <= bbox[2] && lon >= bbox[1] && lon <= bbox[3];
+    }
+
+    // Check if the player is near the edge of the loaded area
+    function checkPlayerPosition() {
+      var playerNode = nodes[currentNodeId];
+      var currentBBox = loadedAreas[loadedAreas.length - 1];
+
+      // Calculate the distance to the edges
+      var lat = playerNode.lat;
+      var lon = playerNode.lon;
+      var buffer = dataFetchThreshold;
+
+      if (lat - buffer <= currentBBox[0] || lat + buffer >= currentBBox[2] ||
+          lon - buffer <= currentBBox[1] || lon + buffer >= currentBBox[3]) {
+        loadAdditionalData(lat, lon);
+      }
+    }
+
+    // Load additional data when player nears the edge
+    function loadAdditionalData(lat, lon) {
+      if (loadingData) return; // Prevent multiple simultaneous loads
+      loadingData = true;
+
+      var bboxSize = 0.01; // Size of the new bounding box
+      var bbox = [
+        lat - bboxSize / 2,
+        lon - bboxSize / 2,
+        lat + bboxSize / 2,
+        lon + bboxSize / 2,
+      ];
+
+      // Check if this area has already been loaded
+      for (var i = 0; i < loadedAreas.length; i++) {
+        var area = loadedAreas[i];
+        if (isBBoxEqual(area, bbox)) {
+          loadingData = false;
+          return;
+        }
+      }
+
+      // Fetch new data
+      fetchStreetData(bbox, function (osmData) {
+        processStreetData(osmData);
+        loadedAreas.push(bbox);
+        loadingData = false;
+      });
+    }
+
+    // Utility function to compare bounding boxes
+    function isBBoxEqual(bbox1, bbox2) {
+      return bbox1[0] === bbox2[0] && bbox1[1] === bbox2[1] &&
+             bbox1[2] === bbox2[2] && bbox1[3] === bbox2[3];
+    }
+
     // Process OSM data into nodes and edges
     function processStreetData(osmData) {
+      // Store the existing node IDs to prevent duplicates
+      var existingNodeIds = new Set(Object.keys(nodes));
+
       osmData.elements.forEach((element) => {
-        if (element.type === 'node') {
+        if (element.type === 'node' && !nodes[element.id]) {
           nodes[element.id] = { id: element.id, lat: element.lat, lon: element.lon, neighbors: [] };
         }
       });
@@ -125,23 +187,33 @@
 
             // Ensure nodes exist before accessing
             if (nodes[from] && nodes[to]) {
-              nodes[from].neighbors.push(to);
-              nodes[to].neighbors.push(from);
+              // Prevent duplicate neighbors
+              if (!nodes[from].neighbors.includes(to)) {
+                nodes[from].neighbors.push(to);
+              }
+              if (!nodes[to].neighbors.includes(from)) {
+                nodes[to].neighbors.push(from);
+              }
 
-              // Draw the street segments
-              L.polyline(
-                [
-                  [nodes[from].lat, nodes[from].lon],
-                  [nodes[to].lat, nodes[to].lon],
-                ],
-                { color: 'blue', weight: 2 }
-              ).addTo(map);
+              // Draw the street segments if not already drawn
+              if (!existingNodeIds.has(from) || !existingNodeIds.has(to)) {
+                L.polyline(
+                  [
+                    [nodes[from].lat, nodes[from].lon],
+                    [nodes[to].lat, nodes[to].lon],
+                  ],
+                  { color: 'blue', weight: 2 }
+                ).addTo(map);
+              }
             }
           }
         }
       });
 
-      placePlayer();
+      // Place player and target if not already placed
+      if (!playerMarker) {
+        placePlayer();
+      }
     }
 
     // Place player and target on the map
@@ -223,7 +295,14 @@
         currentNodeId = nextNodeId;
         var nextNode = nodes[nextNodeId];
         playerMarker.setLatLng([nextNode.lat, nextNode.lon]);
+
+        // Pan the map to the player's new position
+        map.panTo([nextNode.lat, nextNode.lon], { animate: true });
+
         checkWinCondition();
+
+        // Check if we need to load more data
+        checkPlayerPosition();
       }
     }
 
@@ -240,7 +319,8 @@
       // Reset variables
       nodes = {};
       edges = {};
-      visitedNodes = new Set();
+      loadedAreas = [];
+      playerMarker = null;
 
       // Remove existing layers
       map.eachLayer(function (layer) {
@@ -254,16 +334,21 @@
         attribution: '© OpenStreetMap contributors',
       }).addTo(map);
 
-      // Fetch new street data
+      // Fetch initial street data
       var center = map.getCenter();
+      var bboxSize = 0.01;
       var bbox = [
-        center.lat - 0.005,
-        center.lng - 0.005,
-        center.lat + 0.005,
-        center.lng + 0.005,
+        center.lat - bboxSize / 2,
+        center.lng - bboxSize / 2,
+        center.lat + bboxSize / 2,
+        center.lng + bboxSize / 2,
       ];
 
-      fetchStreetData(bbox, processStreetData);
+      fetchStreetData(bbox, function (osmData) {
+        processStreetData(osmData);
+        loadedAreas.push(bbox);
+      });
+
       document.addEventListener('keydown', handleMovement);
       document.getElementById('status').innerHTML = 'Loading map...';
     }
