@@ -1,59 +1,277 @@
-<!-- <html>
-  <head>
-    <meta charset="UTF-8" />
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Sound classification using SpeechCommands18w and p5.js</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
-    <script src="https://unpkg.com/ml5@1/dist/ml5.min.js"></script>
-  </head>
-
-  <body>
-    <script src="index.js"></script>
-  </body>
-</html> -->
-
-<!-- index.html -->
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <title>Multiplayer Game</title>
+  <meta charset="utf-8" />
+  <title>City Exploration Game</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Leaflet CSS -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet/dist/leaflet.css"
+  />
+
+  <!-- Leaflet JavaScript -->
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
   <style>
-    body {
+    body, html, #map {
+      height: 100%;
       margin: 0;
       padding: 0;
-      overflow: hidden;
-      background-color: #000;
     }
-    canvas {
-      display: block;
-    }
-    /* Optional: Style for health bar */
-    #healthBar {
+    #controls {
       position: absolute;
       top: 10px;
-      left: 10px;
-      width: 200px;
-      height: 20px;
-      background-color: red;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1000;
+      background: rgba(255, 255, 255, 0.8);
+      padding: 5px;
+      border-radius: 5px;
     }
-    #health {
-      width: 100%;
-      height: 100%;
-      background-color: green;
+    #status {
+      position: absolute;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1000;
+      background: rgba(255, 255, 255, 0.8);
+      padding: 5px;
+      border-radius: 5px;
     }
   </style>
 </head>
 <body>
-    <div id="healthBar">
-        <div id="health"></div>
-      </div>
 
-  <script src="/socket.io/socket.io.js"></script>
-  <!-- Include p5.js and ml5.js libraries as needed -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
-  <script src="https://unpkg.com/ml5@1/dist/ml5.min.js"></script>
-  <script src="index.js"></script>
+  <div id="controls">
+    <button onclick="startGame()">Start Game</button>
+  </div>
+
+  <div id="status"></div>
+
+  <div id="map"></div>
+
+  <script>
+    // Global variables
+    var map;
+    var playerMarker;
+    var nodes = {};
+    var edges = {};
+    var currentNodeId;
+    var targetNodeId;
+    var visitedNodes = new Set();
+
+    // Initialize the map
+    function initMap() {
+      // Center of the map (latitude, longitude)
+      var center = [51.505, -0.09]; // Example: London coordinates
+
+      map = L.map('map').setView(center, 16);
+
+      // Add OpenStreetMap tile layer
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+      }).addTo(map);
+    }
+
+    // Fetch street data from OpenStreetMap
+    function fetchStreetData(bbox, callback) {
+      var query = `
+        [out:json][timeout:25];
+        (
+          way["highway"](${bbox.join(',')});
+          >;
+        );
+        out body;
+      `;
+
+      fetch('https://overpass-api.de/api/interpreter', {
+        method: 'POST',
+        body: query,
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+      })
+        .then((response) => response.json())
+        .then((data) => {
+          callback(data);
+        })
+        .catch((error) => {
+          console.error('Error fetching OSM data:', error);
+        });
+    }
+
+    // Process OSM data into nodes and edges
+    function processStreetData(osmData) {
+      osmData.elements.forEach((element) => {
+        if (element.type === 'node') {
+          nodes[element.id] = { id: element.id, lat: element.lat, lon: element.lon, neighbors: [] };
+        }
+      });
+
+      osmData.elements.forEach((element) => {
+        if (element.type === 'way') {
+          const nodeRefs = element.nodes;
+          for (let i = 0; i < nodeRefs.length - 1; i++) {
+            let from = nodeRefs[i];
+            let to = nodeRefs[i + 1];
+
+            if (!edges[from]) edges[from] = [];
+            if (!edges[to]) edges[to] = [];
+
+            edges[from].push(to);
+            edges[to].push(from);
+
+            // Ensure nodes exist before accessing
+            if (nodes[from] && nodes[to]) {
+              nodes[from].neighbors.push(to);
+              nodes[to].neighbors.push(from);
+
+              // Draw the street segments
+              L.polyline(
+                [
+                  [nodes[from].lat, nodes[from].lon],
+                  [nodes[to].lat, nodes[to].lon],
+                ],
+                { color: 'blue', weight: 2 }
+              ).addTo(map);
+            }
+          }
+        }
+      });
+
+      placePlayer();
+    }
+
+    // Place player and target on the map
+    function placePlayer() {
+      var nodeIds = Object.keys(nodes);
+      currentNodeId = nodeIds[Math.floor(Math.random() * nodeIds.length)];
+      targetNodeId = nodeIds[Math.floor(Math.random() * nodeIds.length)];
+
+      // Place player marker
+      playerMarker = L.marker([nodes[currentNodeId].lat, nodes[currentNodeId].lon], {
+        title: 'Player',
+        icon: L.icon({
+          iconUrl: 'https://leafletjs.com/examples/custom-icons/leaf-red.png',
+          iconSize: [38, 95],
+          iconAnchor: [22, 94],
+          popupAnchor: [-3, -76],
+        }),
+      }).addTo(map);
+
+      // Place target marker
+      L.marker([nodes[targetNodeId].lat, nodes[targetNodeId].lon], {
+        title: 'Destination',
+        icon: L.icon({
+          iconUrl: 'https://leafletjs.com/examples/custom-icons/leaf-green.png',
+          iconSize: [38, 95],
+          iconAnchor: [22, 94],
+          popupAnchor: [-3, -76],
+        }),
+      }).addTo(map);
+
+      map.setView([nodes[currentNodeId].lat, nodes[currentNodeId].lon], 17);
+
+      // Update status
+      document.getElementById('status').innerHTML = 'Use arrow keys to move. Reach the destination!';
+    }
+
+    // Handle player movement
+    function handleMovement(e) {
+      var key = e.keyCode;
+      var direction;
+
+      if (key === 37) direction = 'left';     // Left arrow
+      else if (key === 38) direction = 'up';    // Up arrow
+      else if (key === 39) direction = 'right'; // Right arrow
+      else if (key === 40) direction = 'down';  // Down arrow
+      else return;
+
+      var neighbors = nodes[currentNodeId].neighbors;
+      var currentNode = nodes[currentNodeId];
+      var nextNodeId = null;
+      var minAngleDiff = Infinity;
+
+      // Determine the angle for the direction pressed
+      var directionAngle;
+
+      if (direction === 'left') directionAngle = Math.PI;
+      else if (direction === 'up') directionAngle = -Math.PI / 2;
+      else if (direction === 'right') directionAngle = 0;
+      else if (direction === 'down') directionAngle = Math.PI / 2;
+
+      // Find the neighbor closest to the desired direction
+      neighbors.forEach((neighborId) => {
+        var neighborNode = nodes[neighborId];
+        var dx = neighborNode.lon - currentNode.lon;
+        var dy = neighborNode.lat - currentNode.lat;
+        var angle = Math.atan2(dy, dx);
+
+        var angleDiff = Math.abs(angle - directionAngle);
+        if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
+
+        if (angleDiff < minAngleDiff) {
+          minAngleDiff = angleDiff;
+          nextNodeId = neighborId;
+        }
+      });
+
+      // Move to the next node if one is found
+      if (nextNodeId) {
+        currentNodeId = nextNodeId;
+        var nextNode = nodes[nextNodeId];
+        playerMarker.setLatLng([nextNode.lat, nextNode.lon]);
+        checkWinCondition();
+      }
+    }
+
+    // Check if the player has reached the destination
+    function checkWinCondition() {
+      if (currentNodeId === targetNodeId) {
+        document.removeEventListener('keydown', handleMovement);
+        document.getElementById('status').innerHTML = 'You have reached your destination! Game Over.';
+      }
+    }
+
+    // Start the game
+    function startGame() {
+      // Reset variables
+      nodes = {};
+      edges = {};
+      visitedNodes = new Set();
+
+      // Remove existing layers
+      map.eachLayer(function (layer) {
+        if (layer instanceof L.Polyline || layer instanceof L.Marker) {
+          map.removeLayer(layer);
+        }
+      });
+
+      // Add tile layer back
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+      }).addTo(map);
+
+      // Fetch new street data
+      var center = map.getCenter();
+      var bbox = [
+        center.lat - 0.005,
+        center.lng - 0.005,
+        center.lat + 0.005,
+        center.lng + 0.005,
+      ];
+
+      fetchStreetData(bbox, processStreetData);
+      document.addEventListener('keydown', handleMovement);
+      document.getElementById('status').innerHTML = 'Loading map...';
+    }
+
+    // Initialize the map on window load
+    window.onload = function () {
+      initMap();
+    };
+  </script>
 </body>
 </html>
