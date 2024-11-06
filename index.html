@@ -54,6 +54,7 @@
 
   <script>
     // Global variables
+    // Global variables
     var map;
     var playerMarker;
     var nodes = {};
@@ -64,6 +65,90 @@
     var loadingData = false; // Flag to prevent multiple data loads
     var dataFetchThreshold = 0.002; // Threshold distance to edge (in degrees)
     var isMoving = false; // Flag to prevent movement during animation
+
+
+    // SVG icon content
+    var playerSVG = `
+      <svg width="50" height="100" viewBox="0 0 200 400" xmlns="http://www.w3.org/2000/svg">
+        <!-- Define gradients for subtle shading -->
+        <defs>
+          <linearGradient id="bodyGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#e60000"/>
+            <stop offset="100%" stop-color="#b30000"/>
+          </linearGradient>
+          <linearGradient id="windowGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#ffffff"/>
+            <stop offset="100%" stop-color="#d9d9d9"/>
+          </linearGradient>
+          <radialGradient id="shadowGradient" cx="50%" cy="100%" r="50%" fx="50%" fy="100%">
+            <stop offset="0%" stop-color="rgba(0,0,0,0.3)" />
+            <stop offset="100%" stop-color="rgba(0,0,0,0)" />
+          </radialGradient>
+          <!-- Gradient for legs -->
+          <linearGradient id="legsGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#f2c9ac"/>
+            <stop offset="100%" stop-color="#d1a17a"/>
+          </linearGradient>
+          <!-- Gradient for shoes -->
+          <linearGradient id="shoesGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#333333"/>
+            <stop offset="100%" stop-color="#000000"/>
+          </linearGradient>
+        </defs>
+
+        <!-- Shadow beneath the phone booth -->
+        <ellipse cx="100" cy="380" rx="80" ry="15" fill="url(#shadowGradient)" />
+
+        <!-- Phone Booth Body -->
+        <rect x="50" y="100" width="100" height="200" rx="10" ry="10" fill="url(#bodyGradient)" stroke="#990000" stroke-width="2"/>
+
+        <!-- Roof -->
+        <rect x="45" y="90" width="110" height="20" rx="5" ry="5" fill="#cc0000" stroke="#990000" stroke-width="2"/>
+
+        <!-- Windows -->
+        <!-- Top Window -->
+        <rect x="65" y="120" width="70" height="40" rx="5" ry="5" fill="url(#windowGradient)" stroke="#990000" stroke-width="2"/>
+        <line x1="100" y1="120" x2="100" y2="160" stroke="#990000" stroke-width="2"/>
+        <line x1="65" y1="140" x2="135" y2="140" stroke="#990000" stroke-width="2"/>
+
+        <!-- Middle Window -->
+        <rect x="65" y="170" width="70" height="40" rx="5" ry="5" fill="url(#windowGradient)" stroke="#990000" stroke-width="2"/>
+        <line x1="100" y1="170" x2="100" y2="210" stroke="#990000" stroke-width="2"/>
+        <line x1="65" y1="190" x2="135" y2="190" stroke="#990000" stroke-width="2"/>
+
+        <!-- Bottom Window -->
+        <rect x="65" y="220" width="70" height="40" rx="5" ry="5" fill="url(#windowGradient)" stroke="#990000" stroke-width="2"/>
+        <line x1="100" y1="220" x2="100" y2="260" stroke="#990000" stroke-width="2"/>
+        <line x1="65" y1="240" x2="135" y2="240" stroke="#990000" stroke-width="2"/>
+
+        <!-- Entrance Door -->
+        <rect x="90" y="260" width="20" height="40" rx="3" ry="3" fill="#333333" stroke="#990000" stroke-width="2"/>
+
+        <!-- Sign at the Top -->
+        <rect x="65" y="70" width="70" height="20" rx="3" ry="3" fill="#ffffff" stroke="#990000" stroke-width="2"/>
+        <text x="100" y="85" font-size="8" fill="#000000" text-anchor="middle" font-family="Arial" font-weight="bold">TELEPHONE</text>
+
+        <!-- Human-like Legs -->
+        <!-- Left Thigh -->
+        <path d="M70,300 Q75,350 80,360" fill="none" stroke="#d1a17a" stroke-width="4" stroke-linecap="round"/>
+        <!-- Left Calf -->
+        <path d="M80,360 Q80,370 75,380" fill="none" stroke="#d1a17a" stroke-width="4" stroke-linecap="round"/>
+        <!-- Left Foot -->
+        <ellipse cx="75" cy="385" rx="10" ry="5" fill="url(#shoesGradient)" stroke="#000000" stroke-width="2"/>
+
+        <!-- Right Thigh -->
+        <path d="M130,300 Q125,350 120,360" fill="none" stroke="#d1a17a" stroke-width="4" stroke-linecap="round"/>
+        <!-- Right Calf -->
+        <path d="M120,360 Q120,370 125,380" fill="none" stroke="#d1a17a" stroke-width="4" stroke-linecap="round"/>
+        <!-- Right Foot -->
+        <ellipse cx="125" cy="385" rx="10" ry="5" fill="url(#shoesGradient)" stroke="#000000" stroke-width="2"/>
+
+        <!-- Shadow of Legs -->
+        <ellipse cx="75" cy="390" rx="12" ry="3" fill="url(#shadowGradient)" transform="rotate(-15 75 390)" />
+        <ellipse cx="125" cy="390" rx="12" ry="3" fill="url(#shadowGradient)" transform="rotate(15 125 390)" />
+      </svg>
+    `;
+
 
     // Initialize the map
     function initMap() {
@@ -223,18 +308,21 @@
       currentNodeId = nodeIds[Math.floor(Math.random() * nodeIds.length)];
       targetNodeId = nodeIds[Math.floor(Math.random() * nodeIds.length)];
 
-      // Place player marker
+      // Create custom icon using DivIcon
+      var playerIcon = L.divIcon({
+        className: 'custom-marker',
+        html: playerSVG,
+        iconSize: [50, 100],
+        iconAnchor: [25, 100], // Adjust the anchor to the bottom center
+      });
+
+      // Place player marker with custom SVG icon
       playerMarker = L.marker([nodes[currentNodeId].lat, nodes[currentNodeId].lon], {
         title: 'Player',
-        icon: L.icon({
-          iconUrl: 'https://leafletjs.com/examples/custom-icons/leaf-red.png',
-          iconSize: [38, 95],
-          iconAnchor: [22, 94],
-          popupAnchor: [-3, -76],
-        }),
+        icon: playerIcon,
       }).addTo(map);
 
-      // Place target marker
+      // Place target marker (remains unchanged)
       L.marker([nodes[targetNodeId].lat, nodes[targetNodeId].lon], {
         title: 'Destination',
         icon: L.icon({
@@ -250,7 +338,7 @@
       // Update status
       document.getElementById('status').innerHTML = 'Use arrow keys to move. Reach the destination!';
     }
-
+    
     // Animate marker movement along the path
     function animateMovement(startLatLng, endLatLng, duration, callback) {
       var startTime = null;
