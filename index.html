@@ -61,6 +61,16 @@
       box-shadow: 0 0 3px rgba(0,0,0,0.5);
     }
 
+    /* New: Custom win marker styling (Green Triangle) */
+    .win-marker {
+      width: 0;
+      height: 0;
+      border-left: 10px solid transparent;
+      border-right: 10px solid transparent;
+      border-bottom: 20px solid green;
+      transform: rotate(180deg); /* Pointing upwards */
+    }
+
     /* Video and Canvas styling */
     #videoContainer {
       position: absolute;
@@ -111,10 +121,12 @@
     let map;
     let playerMarker;
     let targetMarker;
+    let winMarker; // New: Marker for the win target
     let nodes = {};
     let edges = {};
     let currentNodeId;
     let targetNodeId;
+    let winNodeId; // New: Node ID for the win target
     let loadedAreas = [];
     let loadingData = false;
     const dataFetchThreshold = 0.002;
@@ -131,6 +143,9 @@
 
     // Cooldown to prevent rapid movements
     const MOVE_COOLDOWN = 500; // milliseconds
+
+    // Win condition radius in meters
+    const WIN_RADIUS = 10; // Adjust as needed
 
     // Initialize the map
     function initMap() {
@@ -284,8 +299,9 @@
 
       currentNodeId = nodeIds[Math.floor(Math.random() * nodeIds.length)];
       targetNodeId = nodeIds[Math.floor(Math.random() * nodeIds.length)];
+      winNodeId = nodeIds[Math.floor(Math.random() * nodeIds.length)]; // New: Select win node
 
-      // Create custom circular icon
+      // Create custom circular icon for player
       const playerIcon = L.divIcon({
         className: 'player-marker',
       });
@@ -304,6 +320,18 @@
           iconAnchor: [22, 94],
           popupAnchor: [-3, -76],
         }),
+      }).addTo(map);
+
+      // New: Create win marker (Green Triangle)
+      const winIcon = L.divIcon({
+        className: 'win-marker',
+        iconSize: [20, 20], // Adjust size as needed
+        iconAnchor: [10, 10], // Center the icon
+      });
+
+      winMarker = L.marker([nodes[winNodeId].lat, nodes[winNodeId].lon], {
+        title: 'Win Destination',
+        icon: winIcon,
       }).addTo(map);
 
       map.setView([nodes[currentNodeId].lat, nodes[currentNodeId].lon], 17);
@@ -444,7 +472,7 @@
         const landmarks = prediction.landmarks;
 
         drawHand(landmarks);
-        const palmPosition = landmarks[0]; // Wrist position
+        // const palmPosition = landmarks[0]; // Wrist position (No longer used)
 
         // **New Implementation for Palm Tilt Detection**
         detectPalmTilt(landmarks);
@@ -460,8 +488,8 @@
       const middleFingerTip = landmarks[12]; // Landmark 12 is the tip of the middle finger
 
       // Calculate differences
-      const deltaX = middleFingerTip[0] - wrist[0];
-      const deltaY = wrist[1] - middleFingerTip[1]; // Invert Y-axis for correct angle
+      const deltaX = wrist[0] - middleFingerTip[0]; // Invert X-axis due to mirrored video
+      const deltaY = middleFingerTip[1] - wrist[1]; // Adjust Y-axis for correct direction
 
       // Calculate angle in degrees
       const angleRad = Math.atan2(deltaY, deltaX);
@@ -506,11 +534,6 @@
       }
     }
 
-    function handleHandMovement(palmPosition) {
-      // This function is now deprecated by detectPalmTilt
-      // It can be removed or repurposed if needed
-    }
-
     function drawHand(landmarks) {
       ctx.strokeStyle = 'red';
       ctx.lineWidth = 2;
@@ -546,12 +569,28 @@
       });
     }
 
-    // Check if the player has reached the destination
+    // **New: Function to check win condition based on proximity to winMarker**
     function checkWinCondition() {
+      // Existing condition: Reached targetNodeId
       if (currentNodeId === targetNodeId) {
         // Stop processing hand data
         predictions = [];
         document.getElementById('status').textContent = 'You have reached your destination! Game Over.';
+        return;
+      }
+
+      // New condition: Reached winNodeId within WIN_RADIUS meters
+      const playerLatLng = playerMarker.getLatLng();
+      const winLatLng = winMarker.getLatLng();
+
+      const distance = playerLatLng.distanceTo(winLatLng); // Distance in meters
+
+      if (distance <= WIN_RADIUS) {
+        // Stop processing hand data
+        predictions = [];
+        document.getElementById('status').textContent = 'Congratulations! You have reached the win destination! Game Over.';
+        // Optionally, you can remove the winMarker or perform other actions
+        // map.removeLayer(winMarker);
       }
     }
 
@@ -568,6 +607,10 @@
       if (targetMarker) {
         map.removeLayer(targetMarker);
         targetMarker = null;
+      }
+      if (winMarker) { // New: Remove existing winMarker if any
+        map.removeLayer(winMarker);
+        winMarker = null;
       }
       isMoving = false;
       currentZone = 'center';
