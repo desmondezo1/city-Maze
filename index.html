@@ -63,6 +63,7 @@
     var loadedAreas = []; // Keep track of loaded bounding boxes
     var loadingData = false; // Flag to prevent multiple data loads
     var dataFetchThreshold = 0.002; // Threshold distance to edge (in degrees)
+    var isMoving = false; // Flag to prevent movement during animation
 
     // Initialize the map
     function initMap() {
@@ -250,8 +251,35 @@
       document.getElementById('status').innerHTML = 'Use arrow keys to move. Reach the destination!';
     }
 
+    // Animate marker movement along the path
+    function animateMovement(startLatLng, endLatLng, duration, callback) {
+      var startTime = null;
+
+      function animate(timestamp) {
+        if (!startTime) startTime = timestamp;
+        var elapsed = timestamp - startTime;
+        var progress = Math.min(elapsed / duration, 1);
+
+        var currentLat = startLatLng.lat + (endLatLng.lat - startLatLng.lat) * progress;
+        var currentLng = startLatLng.lng + (endLatLng.lng - startLatLng.lng) * progress;
+
+        playerMarker.setLatLng([currentLat, currentLng]);
+        map.panTo([currentLat, currentLng], { animate: false });
+
+        if (progress < 1) {
+          requestAnimationFrame(animate);
+        } else {
+          if (callback) callback();
+        }
+      }
+
+      requestAnimationFrame(animate);
+    }
+
     // Handle player movement
     function handleMovement(e) {
+      if (isMoving) return; // Prevent movement during animation
+
       var key = e.keyCode;
       var direction;
 
@@ -292,17 +320,18 @@
 
       // Move to the next node if one is found
       if (nextNodeId) {
-        currentNodeId = nextNodeId;
+        isMoving = true; // Set the movement flag
         var nextNode = nodes[nextNodeId];
-        playerMarker.setLatLng([nextNode.lat, nextNode.lon]);
+        var startLatLng = L.latLng(currentNode.lat, currentNode.lon);
+        var endLatLng = L.latLng(nextNode.lat, nextNode.lon);
 
-        // Pan the map to the player's new position
-        map.panTo([nextNode.lat, nextNode.lon], { animate: true });
-
-        checkWinCondition();
-
-        // Check if we need to load more data
-        checkPlayerPosition();
+        // Animate the movement over 500 milliseconds
+        animateMovement(startLatLng, endLatLng, 500, function() {
+          currentNodeId = nextNodeId;
+          isMoving = false; // Reset the movement flag
+          checkWinCondition();
+          checkPlayerPosition();
+        });
       }
     }
 
@@ -321,6 +350,7 @@
       edges = {};
       loadedAreas = [];
       playerMarker = null;
+      isMoving = false;
 
       // Remove existing layers
       map.eachLayer(function (layer) {
