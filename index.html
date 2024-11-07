@@ -61,17 +61,9 @@
       box-shadow: 0 0 3px rgba(0,0,0,0.5);
     }
 
-    /* New: Custom opponent marker styling (Blue Circle) */
-    .opponent-marker {
-      width: 20px;
-      height: 20px;
-      background-color: blue;
-      border: 2px solid white;
-      border-radius: 50%;
-      box-shadow: 0 0 3px rgba(0,0,0,0.5);
-    }
+    /* Removed existing .opponent-marker class since we'll use images */
 
-    /* New: Custom win marker styling (Green Triangle) */
+    /* Custom win marker styling (Green Triangle) */
     .win-marker {
       width: 0;
       height: 0;
@@ -156,6 +148,15 @@
     let opponents = []; // Array to hold opponent objects
     let opponentMovementInterval; // Interval ID for opponents' movement
     let gameRunning = false; // Game state
+
+    // **New: Opponent Images Pool**
+    const opponentImages = [
+      'images/zomb1.webp',
+      'images/zomb2.webp',
+      'images/zomb3.png',
+      'images/zomb4.png',
+      // Add more image paths as needed
+    ];
 
     // Cooldown to prevent rapid movements
     const MOVE_COOLDOWN = 500; // milliseconds
@@ -366,7 +367,7 @@
     }
 
     // Animate marker movement along the path
-    function animateMovement(startLatLng, endLatLng, duration, callback) {
+    function animateMovement(marker, startLatLng, endLatLng, duration, callback) {
       const startTime = performance.now();
 
       function animate(currentTime) {
@@ -376,7 +377,7 @@
         const currentLat = startLatLng.lat + (endLatLng.lat - startLatLng.lat) * progress;
         const currentLng = startLatLng.lng + (endLatLng.lng - startLatLng.lng) * progress;
 
-        playerMarker.setLatLng([currentLat, currentLng]);
+        marker.setLatLng([currentLat, currentLng]);
         map.panTo([currentLat, currentLng], { animate: false });
 
         if (progress < 1) {
@@ -438,11 +439,12 @@
         const startLatLng = L.latLng(currentNode.lat, currentNode.lon);
         const endLatLng = L.latLng(nextNode.lat, nextNode.lon);
 
-        animateMovement(startLatLng, endLatLng, 500, () => {
+        animateMovement(playerMarker, startLatLng, endLatLng, 500, () => {
           currentNodeId = nextNodeId;
           isMoving = false;
           checkWinCondition();
           checkPlayerPosition();
+          // Opponents will automatically update their paths in their intervals
         });
       }
     }
@@ -716,6 +718,20 @@
       // Update button text to "Start Game"
       document.getElementById('startStopButton').textContent = 'Start Game';
 
+      // Remove player, target, and win markers from the map
+      if (playerMarker) {
+        map.removeLayer(playerMarker);
+        playerMarker = null;
+      }
+      if (targetMarker) {
+        map.removeLayer(targetMarker);
+        targetMarker = null;
+      }
+      if (winMarker) { // Remove existing winMarker if any
+        map.removeLayer(winMarker);
+        winMarker = null;
+      }
+
       // Remove opponents from the map
       opponents.forEach(opponent => {
         map.removeLayer(opponent.marker);
@@ -737,7 +753,7 @@
       document.getElementById('status').textContent = 'Press "Start Game" to begin.';
     }
 
-    // **New: Function to spawn opponents**
+    // **New: Function to spawn opponents with random images**
     function spawnOpponents() {
       const nodeIds = Object.keys(nodes);
       const maxOpponents = 5; // Maximum number of opponents
@@ -751,9 +767,15 @@
 
         const opponentNodeId = availableNodes[Math.floor(Math.random() * availableNodes.length)];
 
-        // Create opponent marker
-        const opponentIcon = L.divIcon({
-          className: 'opponent-marker',
+        // **Assign a random image to the opponent**
+        const randomImage = opponentImages[Math.floor(Math.random() * opponentImages.length)];
+
+        // Create opponent icon with the selected image
+        const opponentIcon = L.icon({
+          iconUrl: randomImage,
+          iconSize: [32, 32], // Adjust size as needed
+          iconAnchor: [16, 32], // Adjust anchor as needed
+          popupAnchor: [0, -32] // Adjust popup position as needed
         });
 
         const opponentMarker = L.marker([nodes[opponentNodeId].lat, nodes[opponentNodeId].lon], {
@@ -822,122 +844,6 @@
 
       const d = R * c;
       return d;
-    }
-
-    // **New: Function to stop opponents' movement and remove them from the map**
-    function removeOpponents() {
-      opponents.forEach(opponent => {
-        map.removeLayer(opponent.marker);
-      });
-      opponents = [];
-      if (opponentMovementInterval) {
-        clearInterval(opponentMovementInterval);
-        opponentMovementInterval = null;
-      }
-    }
-
-    // **New: Modify the stopGame function to include removing opponents**
-    function stopGame() {
-      gameRunning = false;
-
-      // Update button text to "Start Game"
-      document.getElementById('startStopButton').textContent = 'Start Game';
-
-      // Remove player, target, and win markers from the map
-      if (playerMarker) {
-        map.removeLayer(playerMarker);
-        playerMarker = null;
-      }
-      if (targetMarker) {
-        map.removeLayer(targetMarker);
-        targetMarker = null;
-      }
-      if (winMarker) { // Remove existing winMarker if any
-        map.removeLayer(winMarker);
-        winMarker = null;
-      }
-
-      // Remove opponents from the map
-      removeOpponents();
-
-      isMoving = false;
-      currentZone = 'center';
-      lastMoveTime = 0;
-      predictions = [];
-
-      document.getElementById('status').textContent = 'Press "Start Game" to begin.';
-    }
-
-    // **Optional: Function to handle player death (if you want to customize further)**
-    function handlePlayerDeath(message) {
-      document.getElementById('status').textContent = message;
-      stopGame();
-    }
-
-    // Start the game
-    function startGame() {
-      gameRunning = true;
-
-      // Update button text to "Stop Game"
-      document.getElementById('startStopButton').textContent = 'Stop Game';
-
-      // Reset variables
-      nodes = {};
-      edges = {};
-      loadedAreas = [];
-      if (playerMarker) {
-        map.removeLayer(playerMarker);
-        playerMarker = null;
-      }
-      if (targetMarker) {
-        map.removeLayer(targetMarker);
-        targetMarker = null;
-      }
-      if (winMarker) { // Remove existing winMarker if any
-        map.removeLayer(winMarker);
-        winMarker = null;
-      }
-
-      // Remove existing opponents if any
-      opponents.forEach(opponent => {
-        map.removeLayer(opponent.marker);
-      });
-      opponents = [];
-
-      isMoving = false;
-      currentZone = 'center';
-      lastMoveTime = 0;
-      predictions = [];
-
-      // Remove existing polyline layers
-      map.eachLayer(layer => {
-        if (layer instanceof L.Polyline || layer instanceof L.Marker) {
-          map.removeLayer(layer);
-        }
-      });
-
-      // Add tile layer back
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors',
-      }).addTo(map);
-
-      // Fetch initial street data
-      const center = map.getCenter();
-      const bboxSize = 0.01;
-      const bbox = [
-        center.lat - bboxSize / 2,
-        center.lng - bboxSize / 2,
-        center.lat + bboxSize / 2,
-        center.lng + bboxSize / 2,
-      ];
-
-      fetchStreetData(bbox, osmData => {
-        processStreetData(osmData);
-        loadedAreas.push(bbox);
-        spawnOpponents(); // Spawn opponents after initial data is loaded
-      });
-
-      document.getElementById('status').textContent = 'Loading map...';
     }
 
     // Initialize the map on window load
