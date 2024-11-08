@@ -14,9 +14,11 @@
   <!-- Leaflet JavaScript -->
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+
   <!-- ml5.js Library -->
   <script src="https://unpkg.com/ml5@0.6.1/dist/ml5.min.js"></script>
-
+  <script src="./sketch.js"></script>
   <style>
     /* Reset default margins and paddings */
     * {
@@ -326,7 +328,7 @@
 
   <!-- Map -->
   <div id="map"></div>
-
+  <div id="p5-canvas"></div>
   <script>
     // OpenWeatherMap API Key
     const OPENWEATHERMAP_API_KEY = '01a9cefb1b65015d398e3a63bb58ef81'; // Replace with your actual API key
@@ -440,8 +442,6 @@
     }
 
 
-
-
     // Function to create safe zones
     function createSafeZones() {
       const numSafeZones = 3; // Adjust as needed
@@ -478,6 +478,7 @@
     // Function to activate safe zone effects
     function activateSafeZone() {
       document.getElementById('status').textContent = 'You entered a Safe Zone! Temporary immunity activated.';
+      createParticles(playerMarker.getLatLng().lat, playerMarker.getLatLng().lng, [255, 255, 255], 40); // White particles
       // Implement immunity logic here
       setTimeout(() => {
         document.getElementById('status').textContent = 'Safe Zone effect has worn off.';
@@ -530,6 +531,7 @@
       switch (collectible.type) {
         case 'speed':
           document.getElementById('status').textContent = 'Speed boost activated!';
+          createParticles(playerMarker.getLatLng().lat, playerMarker.getLatLng().lng, [255, 255, 0]); // Yellow particles
           // Implement speed boost logic here
           setTimeout(() => {
             document.getElementById('status').textContent = 'Speed boost has worn off.';
@@ -537,10 +539,13 @@
           break;
         case 'health':
           document.getElementById('status').textContent = 'Health restored!';
-          // Implement health restoration logic here
+          createParticles(playerMarker.getLatLng().lat, playerMarker.getLatLng().lng, [0, 255, 0]); // Green particles
+          playerHealth = Math.min(playerHealth + 20, 100); // Restore 20 health, max 100
+          updateHealthDisplay();
           break;
         case 'invisibility':
           document.getElementById('status').textContent = 'Temporary invisibility activated!';
+          createParticles(playerMarker.getLatLng().lat, playerMarker.getLatLng().lng, [0, 0, 255]); // Blue particles
           // Implement invisibility logic here
           setTimeout(() => {
             document.getElementById('status').textContent = 'Invisibility has worn off.';
@@ -548,7 +553,6 @@
           break;
       }
     }
-
 
 
   // Initialize the map function
@@ -1492,5 +1496,6 @@
       document.getElementById('startGameButton').addEventListener('click', startGame);
     };
   </script>
+
 </body>
 </html>
