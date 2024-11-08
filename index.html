@@ -270,7 +270,10 @@
     <h1>Zombie City Adventure</h1>
     <select id="citySelect">
       <option value="" disabled selected>Select Your City</option>
+      <option value="Bournemouth">Bournemouth</option>
+      <option value="Lagos">Lagos</option>
       <option value="London">London</option>
+      <option value="Port Harcourt">Port Harcourt</option>
       <option value="New York">New York</option>
       <option value="Tokyo">Tokyo</option>
       <option value="Paris">Paris</option>
@@ -305,7 +308,7 @@
 
   <script>
     // OpenWeatherMap API Key
-    const OPENWEATHERMAP_API_KEY = 'API'; // Replace with your actual API key
+    const OPENWEATHERMAP_API_KEY = '01a9cefb1b65015d398e3a63bb58ef81'; // Replace with your actual API key
 
     // Initialize variables
     let map;
@@ -874,46 +877,50 @@
       nodes = {};
       edges = {};
       loadedAreas = [];
-      if (playerMarker) {
-        map.removeLayer(playerMarker);
-        playerMarker = null;
-      }
-      if (targetMarker) {
-        map.removeLayer(targetMarker);
-        targetMarker = null;
-      }
-      if (winMarker) { // Remove existing winMarker if any
-        map.removeLayer(winMarker);
-        winMarker = null;
-      }
-
-      // Remove existing opponents if any
-      opponents.forEach(opponent => {
-        map.removeLayer(opponent.marker);
-        // Stop opponent sounds
-        if (opponent.sound) {
-          opponent.sound.pause();
-          opponent.sound.currentTime = 0;
+      if (map) {
+        if (playerMarker) {
+          map.removeLayer(playerMarker);
+          playerMarker = null;
         }
-      });
-      opponents = [];
-
-      isMoving = false;
-      currentZone = 'center';
-      lastMoveTime = 0;
-      predictions = [];
-
-      // Remove existing polyline layers
-      map.eachLayer(layer => {
-        if (layer instanceof L.Polyline || layer instanceof L.Marker) {
-          map.removeLayer(layer);
+        if (targetMarker) {
+          map.removeLayer(targetMarker);
+          targetMarker = null;
         }
-      });
+        if (winMarker) { // Remove existing winMarker if any
+          map.removeLayer(winMarker);
+          winMarker = null;
+        }
 
-      // Add tile layer back
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors',
-      }).addTo(map);
+        // Remove existing opponents if any
+        opponents.forEach(opponent => {
+          map.removeLayer(opponent.marker);
+          // Stop opponent sounds
+          if (opponent.sound) {
+            opponent.sound.pause();
+            opponent.sound.currentTime = 0;
+          }
+        });
+        opponents = [];
+
+        isMoving = false;
+        currentZone = 'center';
+        lastMoveTime = 0;
+        predictions = [];
+
+        // Remove existing polyline layers
+        map.eachLayer(layer => {
+          if (layer instanceof L.Polyline || layer instanceof L.Marker) {
+            map.removeLayer(layer);
+          }
+        });
+
+        // Add tile layer back
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '© OpenStreetMap contributors',
+        }).addTo(map);
+      } else {
+        // If map is not initialized, it will be initialized after fetching coordinates
+      }
 
       // Get selected city
       const selectedCity = document.getElementById('citySelect').value;
@@ -923,6 +930,17 @@
         stopGame();
         return;
       }
+
+      // Show Status Message
+      document.getElementById('status').style.display = 'block';
+      document.getElementById('status').textContent = 'Loading map...';
+
+      // Hide Capture Overlay in case it was visible from previous game
+      hideCaptureOverlay();
+
+      // Show game controls and video container
+      document.getElementById('controls').style.display = 'block';
+      document.getElementById('videoContainer').style.display = 'block';
 
       // Fetch coordinates from OpenWeatherMap API
       fetchCityCoordinates(selectedCity)
@@ -954,17 +972,6 @@
             themeSong.play().catch(error => {
               console.error('Error playing theme song:', error);
             });
-
-            // Hide Capture Overlay in case it was visible from previous game
-            hideCaptureOverlay();
-
-            // Show Status Message
-            document.getElementById('status').style.display = 'block';
-            document.getElementById('status').textContent = 'Loading map...';
-
-            // Show game controls and video container
-            document.getElementById('controls').style.display = 'block';
-            document.getElementById('videoContainer').style.display = 'block';
           } else {
             alert('Could not retrieve coordinates for the selected city.');
             stopGame();
@@ -990,38 +997,47 @@
       startScreen.classList.remove('hidden');
       startScreen.style.display = 'flex';
 
-      // Reset variables
-      nodes = {};
-      edges = {};
-      loadedAreas = [];
-      if (playerMarker) {
-        map.removeLayer(playerMarker);
-        playerMarker = null;
-      }
-      if (targetMarker) {
-        map.removeLayer(targetMarker);
-        targetMarker = null;
-      }
-      if (winMarker) { // Remove existing winMarker if any
-        map.removeLayer(winMarker);
-        winMarker = null;
-      }
-
-      // Remove existing opponents if any
-      opponents.forEach(opponent => {
-        map.removeLayer(opponent.marker);
-        // Stop opponent sounds
-        if (opponent.sound) {
-          opponent.sound.pause();
-          opponent.sound.currentTime = 0;
+      if (map) {
+        // Reset variables
+        nodes = {};
+        edges = {};
+        loadedAreas = [];
+        if (playerMarker) {
+          map.removeLayer(playerMarker);
+          playerMarker = null;
         }
-      });
-      opponents = [];
+        if (targetMarker) {
+          map.removeLayer(targetMarker);
+          targetMarker = null;
+        }
+        if (winMarker) { // Remove existing winMarker if any
+          map.removeLayer(winMarker);
+          winMarker = null;
+        }
 
-      // Clear opponents' movement interval
-      if (opponentMovementInterval) {
-        clearInterval(opponentMovementInterval);
-        opponentMovementInterval = null;
+        // Remove existing opponents if any
+        opponents.forEach(opponent => {
+          map.removeLayer(opponent.marker);
+          // Stop opponent sounds
+          if (opponent.sound) {
+            opponent.sound.pause();
+            opponent.sound.currentTime = 0;
+          }
+        });
+        opponents = [];
+
+        // Clear opponents' movement interval
+        if (opponentMovementInterval) {
+          clearInterval(opponentMovementInterval);
+          opponentMovementInterval = null;
+        }
+
+        // Remove all polyline and marker layers except the tile layer
+        map.eachLayer(layer => {
+          if (layer instanceof L.Polyline || layer instanceof L.Marker) {
+            map.removeLayer(layer);
+          }
+        });
       }
 
       // Stop Theme Song
@@ -1046,169 +1062,6 @@
       // Hide game controls and video container
       document.getElementById('controls').style.display = 'none';
       document.getElementById('videoContainer').style.display = 'none';
-    }
-
-    // Function to restart the game
-    function restartGame() {
-      // Hide Capture Overlay
-      hideCaptureOverlay();
-
-      // Start a new game
-      startGame();
-    }
-
-    // Function to spawn opponents with random images and sounds
-    function spawnOpponents() {
-      const nodeIds = Object.keys(nodes);
-      const maxOpponents = 20; // Maximum number of opponents
-      const minOpponents = 3; // Minimum number of opponents
-      const numberOfOpponents = Math.floor(Math.random() * (maxOpponents - minOpponents + 1)) + minOpponents;
-
-      for (let i = 0; i < numberOfOpponents; i++) {
-        // Select a random node for the opponent, ensuring it's not the player, target, or win node
-        const availableNodes = nodeIds.filter(id => id !== currentNodeId && id !== targetNodeId && id !== winNodeId);
-        if (availableNodes.length === 0) break; // No available nodes
-
-        const opponentNodeId = availableNodes[Math.floor(Math.random() * availableNodes.length)];
-
-        // Assign a random image to the opponent
-        const randomImage = opponentImages[Math.floor(Math.random() * opponentImages.length)];
-
-        // Create opponent icon with the selected image
-        const opponentIcon = L.icon({
-          iconUrl: randomImage,
-          iconSize: [32, 32], // Adjust size as needed
-          iconAnchor: [16, 32], // Adjust anchor as needed
-          popupAnchor: [0, -32] // Adjust popup position as needed
-        });
-
-        const opponentMarker = L.marker([nodes[opponentNodeId].lat, nodes[opponentNodeId].lon], {
-          title: `Opponent ${i + 1}`,
-          icon: opponentIcon,
-        }).addTo(map);
-
-        // Assign a random sound to the opponent
-        let opponentSound = null;
-        if (opponentSounds.length > 0) {
-          const randomSoundPath = opponentSounds[Math.floor(Math.random() * opponentSounds.length)];
-          opponentSound = new Audio(randomSoundPath);
-          opponentSound.loop = true;
-          opponentSound.volume = 0.5; // Adjust volume as needed
-          opponentSound.play().catch(error => {
-            console.error(`Error playing sound for Opponent ${i + 1}:`, error);
-          });
-        }
-
-        opponents.push({
-          marker: opponentMarker,
-          currentNodeId: opponentNodeId,
-          sound: opponentSound // Store the Audio object
-        });
-      }
-
-      // Start opponents' movement
-      opponentMovementInterval = setInterval(moveOpponents, 1000); // Move opponents every 1 second
-    }
-
-    // Function to move opponents towards the player
-    function moveOpponents() {
-      opponents.forEach(opponent => {
-        if (!opponent.currentNodeId || !nodes[opponent.currentNodeId]) return;
-
-        const playerLat = nodes[currentNodeId].lat;
-        const playerLon = nodes[currentNodeId].lon;
-        const opponentLat = nodes[opponent.currentNodeId].lat;
-        const opponentLon = nodes[opponent.currentNodeId].lon;
-
-        // Find the neighbor that is closest to the player
-        const neighbors = nodes[opponent.currentNodeId].neighbors;
-        let nextNodeId = null;
-        let minDistance = Infinity;
-
-        neighbors.forEach(neighborId => {
-          const neighbor = nodes[neighborId];
-          const distance = getDistance(playerLat, playerLon, neighbor.lat, neighbor.lon);
-          if (distance < minDistance) {
-            minDistance = distance;
-            nextNodeId = neighborId;
-          }
-        });
-
-        if (nextNodeId) {
-          // Move opponent to the next node
-          opponent.currentNodeId = nextNodeId;
-          const newLatLng = [nodes[nextNodeId].lat, nodes[nextNodeId].lon];
-          opponent.marker.setLatLng(newLatLng);
-        }
-      });
-
-      // After moving all opponents, check for collisions
-      checkWinCondition();
-    }
-
-    // Utility function to calculate distance between two coordinates in meters
-    function getDistance(lat1, lon1, lat2, lon2) {
-      const R = 6371e3; // Earth's radius in meters
-      const φ1 = lat1 * Math.PI/180;
-      const φ2 = lat2 * Math.PI/180;
-      const Δφ = (lat2-lat1) * Math.PI/180;
-      const Δλ = (lon2-lon1) * Math.PI/180;
-
-      const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-                Math.cos(φ1) * Math.cos(φ2) *
-                Math.sin(Δλ/2) * Math.sin(Δλ/2);
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-
-      const d = R * c;
-      return d;
-    }
-
-    // Function to show the capture overlay
-    function showCaptureOverlay() {
-      document.getElementById('captureOverlay').style.display = 'flex';
-    }
-
-    // Function to show end game overlay with custom message
-    function showEndOverlay(message) {
-      const overlay = document.getElementById('captureOverlay');
-      overlay.style.display = 'flex';
-      overlay.querySelector('img').src = 'images/GameOver.jpg'; // Change image as needed
-      overlay.querySelector('img').alt = 'Game Over';
-      overlay.querySelector('button').textContent = 'Restart Game';
-      overlay.querySelector('button').onclick = restartGame;
-
-      // Remove existing message if any
-      const existingMsg = overlay.querySelector('p');
-      if (existingMsg) {
-        overlay.removeChild(existingMsg);
-      }
-
-      // Add new message
-      const messagePara = document.createElement('p');
-      messagePara.style.fontSize = '24px';
-      messagePara.style.marginTop = '20px';
-      messagePara.textContent = message;
-      overlay.appendChild(messagePara);
-    }
-
-    // Function to hide the capture overlay
-    function hideCaptureOverlay() {
-      const overlay = document.getElementById('captureOverlay');
-      overlay.style.display = 'none';
-
-      // Reset image if it was changed
-      overlay.querySelector('img').src = 'images/Caught.jpg';
-      overlay.querySelector('img').alt = 'Captured';
-
-      // Reset button text and onclick
-      overlay.querySelector('button').textContent = 'Restart Game';
-      overlay.querySelector('button').onclick = restartGame;
-
-      // Remove any appended messages
-      const appendedParagraph = overlay.querySelector('p');
-      if (appendedParagraph) {
-        overlay.removeChild(appendedParagraph);
-      }
     }
 
     // Function to restart the game
@@ -1522,6 +1375,203 @@
       });
     }
 
+    // Function to check win condition based on proximity to winMarker and collision with opponents
+    function checkWinCondition() {
+      // Existing condition: Reached targetNodeId
+      if (currentNodeId === targetNodeId) {
+        // Stop processing hand data
+        predictions = [];
+        document.getElementById('status').textContent = 'You have reached your destination! Game Over.';
+        showEndOverlay('You have reached your destination! Game Over.');
+        stopGame(false); // Do not hide the overlay
+        return;
+      }
+
+      // New condition: Reached winNodeId within WIN_RADIUS meters
+      const playerLatLng = playerMarker.getLatLng();
+      const winLatLng = winMarker.getLatLng();
+
+      const distanceToWin = playerLatLng.distanceTo(winLatLng); // Distance in meters
+
+      if (distanceToWin <= WIN_RADIUS) {
+        // Stop processing hand data
+        predictions = [];
+        document.getElementById('status').textContent = 'Congratulations! You have reached the win destination! Game Over.';
+        showEndOverlay('Congratulations! You have reached the win destination! Game Over.');
+        stopGame(false); // Do not hide the overlay
+        return;
+      }
+
+      // Check collision with opponents
+      opponents.forEach(opponent => {
+        const opponentLatLng = opponent.marker.getLatLng();
+        const distanceToPlayer = playerLatLng.distanceTo(opponentLatLng); // Distance in meters
+
+        if (distanceToPlayer <= COLLISION_RADIUS) {
+          // Player dies
+          predictions = [];
+          document.getElementById('status').textContent = 'Oh no! An opponent has caught you. Game Over.';
+          showCaptureOverlay(); // Display the overlay image
+          stopGame(false); // Do not hide the overlay
+        }
+      });
+    }
+
+    // Function to toggle the game state (Start/Stop)
+    function toggleGame() {
+      if (!gameRunning) {
+        startGame();
+      } else {
+        stopGame();
+      }
+    }
+
+    // Function to move opponents towards the player
+    function moveOpponents() {
+      opponents.forEach(opponent => {
+        if (!opponent.currentNodeId || !nodes[opponent.currentNodeId]) return;
+
+        const playerLat = nodes[currentNodeId].lat;
+        const playerLon = nodes[currentNodeId].lon;
+        const opponentLat = nodes[opponent.currentNodeId].lat;
+        const opponentLon = nodes[opponent.currentNodeId].lon;
+
+        // Find the neighbor that is closest to the player
+        const neighbors = nodes[opponent.currentNodeId].neighbors;
+        let nextNodeId = null;
+        let minDistance = Infinity;
+
+        neighbors.forEach(neighborId => {
+          const neighbor = nodes[neighborId];
+          const distance = getDistance(playerLat, playerLon, neighbor.lat, neighbor.lon);
+          if (distance < minDistance) {
+            minDistance = distance;
+            nextNodeId = neighborId;
+          }
+        });
+
+        if (nextNodeId) {
+          // Move opponent to the next node
+          opponent.currentNodeId = nextNodeId;
+          const newLatLng = [nodes[nextNodeId].lat, nodes[nextNodeId].lon];
+          opponent.marker.setLatLng(newLatLng);
+        }
+      });
+
+      // After moving all opponents, check for collisions
+      checkWinCondition();
+    }
+
+    // Function to spawn opponents with random images and sounds
+    function spawnOpponents() {
+      const nodeIds = Object.keys(nodes);
+      const maxOpponents = 20; // Maximum number of opponents
+      const minOpponents = 3; // Minimum number of opponents
+      const numberOfOpponents = Math.floor(Math.random() * (maxOpponents - minOpponents + 1)) + minOpponents;
+
+      for (let i = 0; i < numberOfOpponents; i++) {
+        // Select a random node for the opponent, ensuring it's not the player, target, or win node
+        const availableNodes = nodeIds.filter(id => id !== currentNodeId && id !== targetNodeId && id !== winNodeId);
+        if (availableNodes.length === 0) break; // No available nodes
+
+        const opponentNodeId = availableNodes[Math.floor(Math.random() * availableNodes.length)];
+
+        // Assign a random image to the opponent
+        const randomImage = opponentImages[Math.floor(Math.random() * opponentImages.length)];
+
+        // Create opponent icon with the selected image
+        const opponentIcon = L.icon({
+          iconUrl: randomImage,
+          iconSize: [32, 32], // Adjust size as needed
+          iconAnchor: [16, 32], // Adjust anchor as needed
+          popupAnchor: [0, -32] // Adjust popup position as needed
+        });
+
+        const opponentMarker = L.marker([nodes[opponentNodeId].lat, nodes[opponentNodeId].lon], {
+          title: `Opponent ${i + 1}`,
+          icon: opponentIcon,
+        }).addTo(map);
+
+        // Assign a random sound to the opponent
+        let opponentSound = null;
+        if (opponentSounds.length > 0) {
+          const randomSoundPath = opponentSounds[Math.floor(Math.random() * opponentSounds.length)];
+          opponentSound = new Audio(randomSoundPath);
+          opponentSound.loop = true;
+          opponentSound.volume = 0.5; // Adjust volume as needed
+          opponentSound.play().catch(error => {
+            console.error(`Error playing sound for Opponent ${i + 1}:`, error);
+          });
+        }
+
+        opponents.push({
+          marker: opponentMarker,
+          currentNodeId: opponentNodeId,
+          sound: opponentSound // Store the Audio object
+        });
+      }
+
+      // Start opponents' movement
+      opponentMovementInterval = setInterval(moveOpponents, 1000); // Move opponents every 1 second
+    }
+
+    // Function to show the capture overlay
+    function showCaptureOverlay() {
+      document.getElementById('captureOverlay').style.display = 'flex';
+    }
+
+    // Function to show end game overlay with custom message
+    function showEndOverlay(message) {
+      const overlay = document.getElementById('captureOverlay');
+      overlay.style.display = 'flex';
+      overlay.querySelector('img').src = 'images/GameOver.jpg'; // Change image as needed
+      overlay.querySelector('img').alt = 'Game Over';
+      overlay.querySelector('button').textContent = 'Restart Game';
+      overlay.querySelector('button').onclick = restartGame;
+
+      // Remove existing message if any
+      const existingMsg = overlay.querySelector('p');
+      if (existingMsg) {
+        overlay.removeChild(existingMsg);
+      }
+
+      // Add new message
+      const messagePara = document.createElement('p');
+      messagePara.style.fontSize = '24px';
+      messagePara.style.marginTop = '20px';
+      messagePara.textContent = message;
+      overlay.appendChild(messagePara);
+    }
+
+    // Function to hide the capture overlay
+    function hideCaptureOverlay() {
+      const overlay = document.getElementById('captureOverlay');
+      overlay.style.display = 'none';
+
+      // Reset image if it was changed
+      overlay.querySelector('img').src = 'images/Caught.jpg';
+      overlay.querySelector('img').alt = 'Captured';
+
+      // Reset button text and onclick
+      overlay.querySelector('button').textContent = 'Restart Game';
+      overlay.querySelector('button').onclick = restartGame;
+
+      // Remove any appended messages
+      const appendedParagraph = overlay.querySelector('p');
+      if (appendedParagraph) {
+        overlay.removeChild(appendedParagraph);
+      }
+    }
+
+    // Function to restart the game
+    function restartGame() {
+      // Hide Capture Overlay
+      hideCaptureOverlay();
+
+      // Start a new game
+      startGame();
+    }
+
     // Function to fetch city coordinates from OpenWeatherMap Geocoding API
     async function fetchCityCoordinates(cityName) {
       const apiUrl = `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(cityName)}&limit=1&appid=${OPENWEATHERMAP_API_KEY}`;
@@ -1546,8 +1596,8 @@
 
     // Initialize the map on window load
     window.onload = function () {
-      // Initially, the map is not displayed. It will be displayed when the game starts.
-      // Start Screen is already visible by default.
+      // Add event listener to the Start Game button
+      document.getElementById('startGameButton').addEventListener('click', startGame);
     };
   </script>
 </body>
