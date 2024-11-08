@@ -327,6 +327,56 @@
       height: auto;
       margin-right: 10px; /* Space between icon and text */
     }
+
+    #trainingModal {
+      display: none;
+      position: fixed;
+      z-index: 2000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.8);
+    }
+
+    .modal-content {
+      background-color: #fefefe;
+      margin: 10% auto;
+      padding: 20px;
+      border: 1px solid #888;
+      width: 80%;
+      max-width: 500px;
+      text-align: center;
+    }
+
+    #trainingGrid {
+      width: 300px;
+      height: 300px;
+      margin: 20px auto;
+      border: 2px solid #333;
+      position: relative;
+    }
+
+    #trainingBall {
+      width: 20px;
+      height: 20px;
+      background-color: red;
+      border-radius: 50%;
+      position: absolute;
+      top: 140px;
+      left: 140px;
+      transition: all 0.3s ease;
+    }
+
+    #trainingControls {
+      margin-top: 20px;
+    }
+
+    #trainingControls button {
+      padding: 10px 20px;
+      font-size: 16px;
+      margin: 0 10px;
+    }
   </style>
 </head>
 <body>
@@ -410,6 +460,24 @@
       </div>
     </div>
   </div>
+
+
+<!-- Training Modal -->
+<div id="trainingModal" class="modal">
+  <div class="modal-content">
+    <h2>Hand Gesture Training</h2>
+    <p>Practice moving the ball using your hand gestures. Move your palm in the direction you want the ball to go.</p>
+    <div id="trainingGrid">
+      <div id="trainingBall"></div>
+    </div>
+    <div id="trainingControls">
+      <button id="skipTrainingButton">Skip Training</button>
+      <button id="startGameFromTrainingButton">Start Game</button>
+    </div>
+  </div>
+</div>
+
+
 
 <script src="./index.js"></script>
 </body>

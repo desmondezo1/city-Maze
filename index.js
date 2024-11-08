@@ -4,6 +4,8 @@ const OPENWEATHERMAP_API_KEY = '01a9cefb1b65015d398e3a63bb58ef81'; // Replace wi
 
 let playerHealth = 100; // Starting health
 
+let trainingBall;
+let isTraining = false;
 
 // Initialize variables
 let map;
@@ -94,6 +96,44 @@ function getDistanceMeters(lat1, lon1, lat2, lon2) {
   const distance = R * c; // in meters
   return distance;
 }
+
+
+function showTrainingModal() {
+    document.getElementById('trainingModal').style.display = 'block';
+    isTraining = true;
+    trainingBall = document.getElementById('trainingBall');
+    setupHandpose(); // Make sure handpose is set up for training
+  }
+  
+  function hideTrainingModal() {
+    document.getElementById('trainingModal').style.display = 'none';
+    isTraining = false;
+    document.getElementById('skipTrainingButton').style.display = 'none';
+    document.getElementById('startGameFromTrainingButton').style.display = 'inline-block';
+  }
+  
+  function moveBallInTraining(direction) {
+    if (!isTraining) return;
+    
+    const currentLeft = parseInt(trainingBall.style.left) || 140;
+    const currentTop = parseInt(trainingBall.style.top) || 140;
+    
+    switch(direction) {
+      case 'left':
+        trainingBall.style.left = Math.max(0, currentLeft - 20) + 'px';
+        break;
+      case 'right':
+        trainingBall.style.left = Math.min(280, currentLeft + 20) + 'px';
+        break;
+      case 'up':
+        trainingBall.style.top = Math.max(0, currentTop - 20) + 'px';
+        break;
+      case 'down':
+        trainingBall.style.top = Math.min(280, currentTop + 20) + 'px';
+        break;
+    }
+  }
+
 
 
 function updateHealthDisplay() {
@@ -490,6 +530,12 @@ function animateMovement(marker, startLatLng, endLatLng, duration, callback) {
 
 // Handle player movement based on direction
 function handleMovement(direction) {
+
+    if (isTraining) {
+        moveBallInTraining(direction);
+        return;
+      }
+
   if (isMoving) return;
 
   if (!currentNodeId || !nodes[currentNodeId]) {
@@ -775,133 +821,153 @@ function toggleGame() {
 
 // Function to start the game
 function startGame() {
-  gameRunning = true;
-
-  // Update button text to "Stop Game"
-  document.getElementById('controls').querySelector('button').textContent = 'Stop Game';
-
-  // Hide Start Screen with fade-out effect
-  const startScreen = document.getElementById('startScreen');
-  startScreen.classList.add('hidden');
-
-  // Delay to allow CSS transition
-  setTimeout(() => {
-    startScreen.style.display = 'none';
-  }, 500); // Match the CSS transition duration
-
-  // Reset variables
-  nodes = {};
-  edges = {};
-  loadedAreas = [];
-  if (map) {
-    if (playerMarker) {
-      map.removeLayer(playerMarker);
-      playerMarker = null;
-    }
-    if (targetMarker) {
-      map.removeLayer(targetMarker);
-      targetMarker = null;
-    }
-    if (winMarker) { // Remove existing winMarker if any
-      map.removeLayer(winMarker);
-      winMarker = null;
-    }
-
-    // Remove existing opponents if any
-    opponents.forEach(opponent => {
-      map.removeLayer(opponent.marker);
-      // Stop opponent sounds
-      if (opponent.sound) {
-        opponent.sound.pause();
-        opponent.sound.currentTime = 0;
-      }
-    });
-    opponents = [];
-
-    isMoving = false;
-    lastMoveTime = 0;
-    predictions = [];
-
-    // Remove existing polyline layers
-    map.eachLayer(layer => {
-      if (layer instanceof L.Polyline || layer instanceof L.Marker) {
-        map.removeLayer(layer);
-      }
-    });
-
-    // Add tile layer back
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors',
-    }).addTo(map);
-  } else {
-    // If map is not initialized, it will be initialized after fetching coordinates
+    gameRunning = true;
+  
+    // Update button text to "Stop Game"
+    document.getElementById('controls').querySelector('button').textContent = 'Stop Game';
+  
+    // Hide Start Screen with fade-out effect
+    const startScreen = document.getElementById('startScreen');
+    startScreen.classList.add('hidden');
+  
+    // Delay to allow CSS transition
+    setTimeout(() => {
+      startScreen.style.display = 'none';
+    }, 500); // Match the CSS transition duration
+  
+    // Show training modal
+    showTrainingModal();
+  
+    // The rest of the game initialization will be moved to initializeGameAfterTraining
   }
-
-  // Get selected city
-  const selectedCity = document.getElementById('citySelect').value;
-
-  if (!selectedCity) {
-    alert('Please select a city to start the game.');
-    stopGame();
-    return;
-  }
-
-  // Show Status Message
-  document.getElementById('status').style.display = 'block';
-  document.getElementById('status').textContent = 'Loading map...';
-
-  // Hide Capture Overlay in case it was visible from previous game
-  hideCaptureOverlay();
-
-  // Show game controls and video container
-  document.getElementById('controls').style.display = 'block';
-  document.getElementById('videoContainer').style.display = 'block';
-
-  // Fetch coordinates from OpenWeatherMap API
-  fetchCityCoordinates(selectedCity)
-    .then(coordinates => {
-      if (coordinates) {
-        // Initialize the map with selected city
-        if (map) {
-          map.setView([coordinates.lat, coordinates.lon], 16);
-          // Invalidate map size in case of layout changes
-          setTimeout(() => {
-            map.invalidateSize();
-          }, 100);
-        } else {
-          initMap(coordinates);
+  
+  function initializeGameAfterTraining() {
+    // Reset variables
+    nodes = {};
+    edges = {};
+    loadedAreas = [];
+    if (map) {
+      if (playerMarker) {
+        map.removeLayer(playerMarker);
+        playerMarker = null;
+      }
+      if (targetMarker) {
+        map.removeLayer(targetMarker);
+        targetMarker = null;
+      }
+      if (winMarker) {
+        map.removeLayer(winMarker);
+        winMarker = null;
+      }
+  
+      // Remove existing opponents if any
+      opponents.forEach(opponent => {
+        map.removeLayer(opponent.marker);
+        if (opponent.sound) {
+          opponent.sound.pause();
+          opponent.sound.currentTime = 0;
         }
-
-        // Fetch initial street data
-        const bboxSize = 0.01;
-        const bbox = [
-          coordinates.lat - bboxSize / 2,
-          coordinates.lon - bboxSize / 2,
-          coordinates.lat + bboxSize / 2,
-          coordinates.lon + bboxSize / 2,
-        ];
-
-        fetchStreetData(bbox, osmData => {
-          processStreetData(osmData);
-          loadedAreas.push(bbox);
-          spawnOpponents(); // Spawn opponents after initial data is loaded
-        });
-
-        // Play Theme Song
-        themeSong.play().catch(error => {
-          console.error('Error playing theme song:', error);
-        });
-      } else {
-        alert('Could not retrieve coordinates for the selected city.');
+      });
+      opponents = [];
+  
+      isMoving = false;
+      lastMoveTime = 0;
+      predictions = [];
+  
+      // Remove existing polyline layers
+      map.eachLayer(layer => {
+        if (layer instanceof L.Polyline || layer instanceof L.Marker) {
+          map.removeLayer(layer);
+        }
+      });
+  
+      // Add tile layer back
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+      }).addTo(map);
+    }
+  
+    // Get selected city
+    const selectedCity = document.getElementById('citySelect').value;
+  
+    // Show Status Message
+    document.getElementById('status').style.display = 'block';
+    document.getElementById('status').textContent = 'Loading map...';
+  
+    // Hide Capture Overlay in case it was visible from previous game
+    hideCaptureOverlay();
+  
+    // Show game controls and video container
+    document.getElementById('controls').style.display = 'block';
+    document.getElementById('videoContainer').style.display = 'block';
+  
+    // Fetch coordinates from OpenWeatherMap API
+    fetchCityCoordinates(selectedCity)
+      .then(coordinates => {
+        if (coordinates) {
+          // Initialize the map with selected city
+          if (map) {
+            map.setView([coordinates.lat, coordinates.lon], 16);
+            setTimeout(() => {
+              map.invalidateSize();
+            }, 100);
+          } else {
+            initMap(coordinates);
+          }
+  
+          // Fetch initial street data
+          const bboxSize = 0.01;
+          const bbox = [
+            coordinates.lat - bboxSize / 2,
+            coordinates.lon - bboxSize / 2,
+            coordinates.lat + bboxSize / 2,
+            coordinates.lon + bboxSize / 2,
+          ];
+  
+          fetchStreetData(bbox, osmData => {
+            processStreetData(osmData);
+            loadedAreas.push(bbox);
+            spawnOpponents(); // Spawn opponents after initial data is loaded
+          });
+  
+          // Play Theme Song
+          themeSong.play().catch(error => {
+            console.error('Error playing theme song:', error);
+          });
+        } else {
+          alert('Could not retrieve coordinates for the selected city.');
+          stopGame();
+        }
+      })
+      .catch(error => {
+        console.error('Error fetching city coordinates:', error);
+        alert('Error fetching city coordinates.');
         stopGame();
-      }
-    })
-    .catch(error => {
-      console.error('Error fetching city coordinates:', error);
-      alert('Error fetching city coordinates.');
-      stopGame();
-    });
-}
+      });
+  }
+
+  function showTrainingModal() {
+    document.getElementById('trainingModal').style.display = 'block';
+    isTraining = true;
+    trainingBall = document.getElementById('trainingBall');
+    setupHandpose(); // Make sure handpose is set up for training
+  }
+  
+  function hideTrainingModal() {
+    document.getElementById('trainingModal').style.display = 'none';
+    isTraining = false;
+  }
+  
+  // Add event listeners for the training buttons
+  document.getElementById('skipTrainingButton').addEventListener('click', () => {
+    hideTrainingModal();
+    initializeGameAfterTraining();
+  });
+  
+  document.getElementById('startGameFromTrainingButton').addEventListener('click', () => {
+    hideTrainingModal();
+    initializeGameAfterTraining();
+  });
 
 // Function to stop the game
 // Parameter hideOverlay determines whether to hide the capture overlay
