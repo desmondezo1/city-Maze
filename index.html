@@ -171,7 +171,7 @@
     .escape-marker {
       width: 32px;
       height: 32px;
-      background-image: url('images/escape.png'); /* Replace with your escape icon */
+      background-image: url('images/gate.png'); /* Replace with your escape icon */
       background-size: cover;
       background-repeat: no-repeat;
       border: 2px solid white;
@@ -465,7 +465,7 @@
           lon: nodes[randomNodeId].lon,
           marker: L.marker([nodes[randomNodeId].lat, nodes[randomNodeId].lon], {
             icon: L.icon({
-              iconUrl: `images/${type}-collectible.png`, // Replace with your collectible icons
+              iconUrl: `images/collectibles/${type}.webp`, // Replace with your collectible icons
               iconSize: [24, 24],
               iconAnchor: [12, 12]
             })
@@ -725,7 +725,7 @@
 
       // Create escape marker with custom icon
       const escapeIcon = L.icon({
-        iconUrl: 'images/escape.png', // Replace with your custom escape icon path
+        iconUrl: 'images/gate.png', // Replace with your custom escape icon path
         iconSize: [32, 32], // Adjust size as needed
         iconAnchor: [16, 32], // Adjust anchor as needed
         popupAnchor: [0, -32] // Adjust popup position as needed
@@ -1348,7 +1348,7 @@
     function showEndOverlay(message) {
       const overlay = document.getElementById('captureOverlay');
       overlay.style.display = 'flex';
-      overlay.querySelector('img').src = 'images/GameOver.jpg'; // Change image as needed
+      overlay.querySelector('img').src = 'images/gameover.webp'; // Change image as needed
       overlay.querySelector('img').alt = 'Game Over';
       overlay.querySelector('button').textContent = 'Restart Game';
       overlay.querySelector('button').onclick = restartGame;
