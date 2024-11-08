@@ -167,14 +167,16 @@
       box-shadow: 0 0 5px rgba(0,0,0,0.7);
     }
 
-    /* Win Marker Styling (Green Triangle) */
-    .win-marker {
-      width: 0;
-      height: 0;
-      border-left: 12px solid transparent;
-      border-right: 12px solid transparent;
-      border-bottom: 24px solid green;
-      transform: rotate(180deg); /* Pointing upwards */
+    /* Escape Marker Styling */
+    .escape-marker {
+      width: 32px;
+      height: 32px;
+      background-image: url('images/escape.png'); /* Replace with your escape icon */
+      background-size: cover;
+      background-repeat: no-repeat;
+      border: 2px solid white;
+      border-radius: 50%;
+      box-shadow: 0 0 5px rgba(0,0,0,0.7);
     }
 
     /* Video and Canvas Styling */
@@ -270,8 +272,7 @@
   <div id="startScreen" class="visible">
     <h1>Zombie City Adventure</h1>
 
-
-    <input list="list-of-cities" id="citySelect" name="ice-cream-choice" />
+    <input list="list-of-cities" id="citySelect" name="city-choice" />
 
     <datalist id="list-of-cities">
       <option value="Bournemouth">Bournemouth</option>
@@ -283,19 +284,6 @@
       <option value="Paris">Paris</option>
       <option value="Berlin">Berlin</option>
     </datalist>
-
-
-    <!-- <select id="citySelect">
-      <option value="" disabled selected>Select Your City</option>
-      <option value="Bournemouth">Bournemouth</option>
-      <option value="Lagos">Lagos</option>
-      <option value="London">London</option>
-      <option value="Port Harcourt">Port Harcourt</option>
-      <option value="New York">New York</option>
-      <option value="Tokyo">Tokyo</option>
-      <option value="Paris">Paris</option>
-      <option value="Berlin">Berlin</option>
-    </select> -->
 
     <button id="startGameButton">Start Game</button>
   </div>
@@ -331,12 +319,12 @@
     let map;
     let playerMarker;
     let targetMarker;
-    let winMarker; // Marker for the win target
+    let winMarker; // Marker for the escape point
     let nodes = {};
     let edges = {};
     let currentNodeId;
     let targetNodeId;
-    let winNodeId; // Node ID for the win target
+    let winNodeId; // Node ID for the escape point
     let loadedAreas = [];
     let loadingData = false;
     const dataFetchThreshold = 0.002;
@@ -348,13 +336,16 @@
     let ctx;
     let handposeModel;
     let predictions = [];
-    let currentZone = 'center';
     let lastMoveTime = 0;
 
     // Game state variables
     let opponents = []; // Array to hold opponent objects
     let opponentMovementInterval; // Interval ID for opponents' movement
     let gameRunning = false; // Game state
+
+    // Constants
+    const ESCAPE_RADIUS_MILES = 1; // 1 mile radius
+    const MILES_TO_METERS = 1609.34; // Conversion factor
 
     // Opponent Images Pool
     const opponentImages = [
@@ -387,8 +378,29 @@
     // Collision detection radius in meters
     const COLLISION_RADIUS = 10; // Adjust as needed
 
+    // Utility function to calculate distance between two coordinates in meters
+    function getDistanceMeters(lat1, lon1, lat2, lon2) {
+      const R = 6371e3; // Earth's radius in meters
+      const φ1 = lat1 * Math.PI / 180;
+      const φ2 = lat2 * Math.PI / 180;
+      const Δφ = (lat2 - lat1) * Math.PI / 180;
+      const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+      const a = Math.sin(Δφ / 2) ** 2 +
+                Math.cos(φ1) * Math.cos(φ2) *
+                Math.sin(Δλ / 2) ** 2;
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+      const distance = R * c; // in meters
+      return distance;
+    }
+
     // Initialize the map
     function initMap(centerCoordinates) {
+      // Show the map first to ensure it's visible
+      document.getElementById('map').style.display = 'block';
+
+      // Initialize the Leaflet map
       map = L.map('map').setView([centerCoordinates.lat, centerCoordinates.lon], 16);
 
       // Add OpenStreetMap tile layer
@@ -396,8 +408,10 @@
         attribution: '© OpenStreetMap contributors',
       }).addTo(map);
 
-      // Show the map
-      document.getElementById('map').style.display = 'block';
+      // Invalidate map size to fix rendering issues
+      setTimeout(() => {
+        map.invalidateSize();
+      }, 100);
     }
 
     // Fetch street data from OpenStreetMap
@@ -525,7 +539,7 @@
         }
       });
 
-      // Place player and target if not already placed
+      // Place player and targets if not already placed
       if (!playerMarker) {
         placePlayer();
         setupHandpose();
@@ -541,8 +555,8 @@
         return;
       }
 
-      // Ensure that target and win nodes are not the same as player
-      const availableNodes = nodeIds.slice(); // Clone the array
+      // Clone the array to avoid mutating the original
+      const availableNodes = nodeIds.slice();
 
       // Select player node
       currentNodeId = availableNodes.splice(Math.floor(Math.random() * availableNodes.length), 1)[0];
@@ -550,8 +564,20 @@
       // Select target node
       targetNodeId = availableNodes.splice(Math.floor(Math.random() * availableNodes.length), 1)[0];
 
-      // Select win node
-      winNodeId = availableNodes.splice(Math.floor(Math.random() * availableNodes.length), 1)[0];
+      // Select escape node within 1-mile radius
+      const playerNode = nodes[currentNodeId];
+      const escapeNodes = availableNodes.filter(nodeId => {
+        const node = nodes[nodeId];
+        const distance = getDistanceMeters(playerNode.lat, playerNode.lon, node.lat, node.lon);
+        return distance <= (ESCAPE_RADIUS_MILES * MILES_TO_METERS);
+      });
+
+      if (escapeNodes.length === 0) {
+        console.warn('No nodes found within the escape radius. Selecting a random node.');
+        winNodeId = availableNodes[Math.floor(Math.random() * availableNodes.length)];
+      } else {
+        winNodeId = escapeNodes[Math.floor(Math.random() * escapeNodes.length)];
+      }
 
       // Create custom circular icon for player
       const playerIcon = L.divIcon({
@@ -574,20 +600,21 @@
         }),
       }).addTo(map);
 
-      // Create win marker (Green Triangle)
-      const winIcon = L.divIcon({
-        className: 'win-marker',
-        iconSize: [20, 20], // Adjust size as needed
-        iconAnchor: [10, 10], // Center the icon
+      // Create escape marker with custom icon
+      const escapeIcon = L.icon({
+        iconUrl: 'images/escape.png', // Replace with your custom escape icon path
+        iconSize: [32, 32], // Adjust size as needed
+        iconAnchor: [16, 32], // Adjust anchor as needed
+        popupAnchor: [0, -32] // Adjust popup position as needed
       });
 
       winMarker = L.marker([nodes[winNodeId].lat, nodes[winNodeId].lon], {
-        title: 'Win Destination',
-        icon: winIcon,
+        title: 'Escape Point',
+        icon: escapeIcon,
       }).addTo(map);
 
       map.setView([nodes[currentNodeId].lat, nodes[currentNodeId].lon], 17);
-      document.getElementById('status').textContent = 'Use your palm to navigate. Reach the destination!';
+      document.getElementById('status').textContent = 'Use your palm to navigate. Reach the escape point!';
       document.getElementById('status').style.display = 'block';
     }
 
@@ -823,7 +850,7 @@
       });
     }
 
-    // Function to check win condition based on proximity to winMarker and collision with opponents
+    // Function to check win condition based on proximity to escape point and collision with opponents
     function checkWinCondition() {
       // Existing condition: Reached targetNodeId
       if (currentNodeId === targetNodeId) {
@@ -835,17 +862,17 @@
         return;
       }
 
-      // New condition: Reached winNodeId within WIN_RADIUS meters
+      // New condition: Reached escape point within WIN_RADIUS meters
       const playerLatLng = playerMarker.getLatLng();
-      const winLatLng = winMarker.getLatLng();
+      const escapeLatLng = winMarker.getLatLng();
 
-      const distanceToWin = playerLatLng.distanceTo(winLatLng); // Distance in meters
+      const distanceToEscape = playerLatLng.distanceTo(escapeLatLng); // Distance in meters
 
-      if (distanceToWin <= WIN_RADIUS) {
+      if (distanceToEscape <= WIN_RADIUS) {
         // Stop processing hand data
         predictions = [];
-        document.getElementById('status').textContent = 'Congratulations! You have reached the win destination! Game Over.';
-        showEndOverlay('Congratulations! You have reached the win destination! Game Over.');
+        document.getElementById('status').textContent = 'Congratulations! You have escaped the city! Game Over.';
+        showEndOverlay('Congratulations! You have escaped the city! Game Over.');
         stopGame(false); // Do not hide the overlay
         return;
       }
@@ -920,7 +947,6 @@
         opponents = [];
 
         isMoving = false;
-        currentZone = 'center';
         lastMoveTime = 0;
         predictions = [];
 
@@ -966,6 +992,10 @@
             // Initialize the map with selected city
             if (map) {
               map.setView([coordinates.lat, coordinates.lon], 16);
+              // Invalidate map size in case of layout changes
+              setTimeout(() => {
+                map.invalidateSize();
+              }, 100);
             } else {
               initMap(coordinates);
             }
@@ -1018,7 +1048,7 @@
         // Reset variables
         nodes = {};
         edges = {};
-        loadedAreas = [];
+        loadedAreas = {};
         if (playerMarker) {
           map.removeLayer(playerMarker);
           playerMarker = null;
@@ -1068,7 +1098,6 @@
 
       // Reset game state
       isMoving = false;
-      currentZone = 'center';
       lastMoveTime = 0;
       predictions = [];
 
@@ -1098,7 +1127,7 @@
       const numberOfOpponents = Math.floor(Math.random() * (maxOpponents - minOpponents + 1)) + minOpponents;
 
       for (let i = 0; i < numberOfOpponents; i++) {
-        // Select a random node for the opponent, ensuring it's not the player, target, or win node
+        // Select a random node for the opponent, ensuring it's not the player, target, or escape node
         const availableNodes = nodeIds.filter(id => id !== currentNodeId && id !== targetNodeId && id !== winNodeId);
         if (availableNodes.length === 0) break; // No available nodes
 
@@ -1160,7 +1189,7 @@
 
         neighbors.forEach(neighborId => {
           const neighbor = nodes[neighborId];
-          const distance = getDistance(playerLat, playerLon, neighbor.lat, neighbor.lon);
+          const distance = getDistanceMeters(playerLat, playerLon, neighbor.lat, neighbor.lon);
           if (distance < minDistance) {
             minDistance = distance;
             nextNodeId = neighborId;
@@ -1177,359 +1206,6 @@
 
       // After moving all opponents, check for collisions
       checkWinCondition();
-    }
-
-    // Utility function to calculate distance between two coordinates in meters
-    function getDistance(lat1, lon1, lat2, lon2) {
-      const R = 6371e3; // Earth's radius in meters
-      const φ1 = lat1 * Math.PI/180;
-      const φ2 = lat2 * Math.PI/180;
-      const Δφ = (lat2-lat1) * Math.PI/180;
-      const Δλ = (lon2-lon1) * Math.PI/180;
-
-      const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-                Math.cos(φ1) * Math.cos(φ2) *
-                Math.sin(Δλ/2) * Math.sin(Δλ/2);
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-
-      const d = R * c;
-      return d;
-    }
-
-    // Function to show the capture overlay
-    function showCaptureOverlay() {
-      document.getElementById('captureOverlay').style.display = 'flex';
-    }
-
-    // Function to show end game overlay with custom message
-    function showEndOverlay(message) {
-      const overlay = document.getElementById('captureOverlay');
-      overlay.style.display = 'flex';
-      overlay.querySelector('img').src = 'images/GameOver.jpg'; // Change image as needed
-      overlay.querySelector('img').alt = 'Game Over';
-      overlay.querySelector('button').textContent = 'Restart Game';
-      overlay.querySelector('button').onclick = restartGame;
-
-      // Remove existing message if any
-      const existingMsg = overlay.querySelector('p');
-      if (existingMsg) {
-        overlay.removeChild(existingMsg);
-      }
-
-      // Add new message
-      const messagePara = document.createElement('p');
-      messagePara.style.fontSize = '24px';
-      messagePara.style.marginTop = '20px';
-      messagePara.textContent = message;
-      overlay.appendChild(messagePara);
-    }
-
-    // Function to hide the capture overlay
-    function hideCaptureOverlay() {
-      const overlay = document.getElementById('captureOverlay');
-      overlay.style.display = 'none';
-
-      // Reset image if it was changed
-      overlay.querySelector('img').src = 'images/Caught.jpg';
-      overlay.querySelector('img').alt = 'Captured';
-
-      // Reset button text and onclick
-      overlay.querySelector('button').textContent = 'Restart Game';
-      overlay.querySelector('button').onclick = restartGame;
-
-      // Remove any appended messages
-      const appendedParagraph = overlay.querySelector('p');
-      if (appendedParagraph) {
-        overlay.removeChild(appendedParagraph);
-      }
-    }
-
-    // Function to restart the game
-    function restartGame() {
-      // Hide Capture Overlay
-      hideCaptureOverlay();
-
-      // Start a new game
-      startGame();
-    }
-
-    // Function to set up the handpose model
-    function setupHandpose() {
-      videoElement = document.getElementById('video');
-      canvasElement = document.getElementById('overlay');
-      ctx = canvasElement.getContext('2d');
-
-      navigator.mediaDevices.getUserMedia({ video: true })
-        .then(stream => {
-          videoElement.srcObject = stream;
-          videoElement.play();
-
-          videoElement.onloadeddata = () => {
-            canvasElement.width = videoElement.videoWidth;
-            canvasElement.height = videoElement.videoHeight;
-
-            handposeModel = ml5.handpose(videoElement, modelReady);
-
-            handposeModel.on('predict', results => {
-              predictions = results;
-            });
-          };
-        })
-        .catch(err => {
-          console.error('Error accessing webcam: ', err);
-          document.getElementById('status').textContent = 'Error accessing webcam. Please allow camera access.';
-        });
-    }
-
-    function modelReady() {
-      console.log('Handpose model ready!');
-      processHandData();
-    }
-
-    // Function to process hand data and control movement
-    function processHandData() {
-      ctx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-
-      if (predictions.length > 0) {
-        const prediction = predictions[0];
-        const landmarks = prediction.landmarks;
-
-        drawHand(landmarks);
-
-        // Implementation for Palm Tilt Detection
-        detectPalmTilt(landmarks);
-      }
-
-      requestAnimationFrame(processHandData);
-    }
-
-    // Function to detect palm tilt and determine direction
-    function detectPalmTilt(landmarks) {
-      // Extract necessary landmarks
-      const wrist = landmarks[0];
-      const middleFingerTip = landmarks[12]; // Landmark 12 is the tip of the middle finger
-
-      // Calculate differences
-      const deltaX = wrist[0] - middleFingerTip[0]; // Invert X-axis due to mirrored video
-      const deltaY = middleFingerTip[1] - wrist[1]; // Adjust Y-axis for correct direction
-
-      // Calculate angle in degrees
-      const angleRad = Math.atan2(deltaY, deltaX);
-      let angleDeg = angleRad * (180 / Math.PI);
-
-      // Normalize angle to [0, 360)
-      if (angleDeg < 0) {
-        angleDeg += 360;
-      }
-
-      // Define angle thresholds for directions
-      // Adjust these thresholds as needed based on testing
-      const directionThresholds = {
-        'up': { min: 45, max: 135 },
-        'right': { min: 315, max: 360 },
-        'right_ext': { min: 0, max: 45 }, // Combining for right
-        'down': { min: 225, max: 315 },
-        'left': { min: 135, max: 225 }
-      };
-
-      let detectedDirection = null;
-
-      if (angleDeg >= directionThresholds['up'].min && angleDeg < directionThresholds['up'].max) {
-        detectedDirection = 'up';
-      } else if (
-        (angleDeg >= directionThresholds['right'].min && angleDeg < directionThresholds['right'].max) ||
-        (angleDeg >= directionThresholds['right_ext'].min && angleDeg < directionThresholds['right_ext'].max)
-      ) {
-        detectedDirection = 'right';
-      } else if (angleDeg >= directionThresholds['down'].min && angleDeg < directionThresholds['down'].max) {
-        detectedDirection = 'down';
-      } else if (angleDeg >= directionThresholds['left'].min && angleDeg < directionThresholds['left'].max) {
-        detectedDirection = 'left';
-      }
-
-      // Debugging: Display angle and direction
-      // Uncomment the following line to see the angle and direction on the canvas
-      // ctx.fillText(`Angle: ${Math.round(angleDeg)}°, Dir: ${detectedDirection || 'None'}`, 10, 20);
-
-      if (detectedDirection) {
-        movePlayer(detectedDirection);
-      }
-    }
-
-    // Function to draw the hand on the canvas
-    function drawHand(landmarks) {
-      ctx.strokeStyle = 'red';
-      ctx.lineWidth = 2;
-
-      // Define finger connections
-      const fingers = [
-        [0, 1, 2, 3, 4],     // Thumb
-        [0, 5, 6, 7, 8],     // Index finger
-        [0, 9, 10, 11, 12],  // Middle finger
-        [0, 13, 14, 15, 16], // Ring finger
-        [0, 17, 18, 19, 20]  // Pinky
-      ];
-
-      // Draw finger lines
-      fingers.forEach(finger => {
-        for (let i = 0; i < finger.length - 1; i++) {
-          const start = landmarks[finger[i]];
-          const end = landmarks[finger[i + 1]];
-
-          ctx.beginPath();
-          ctx.moveTo(start[0], start[1]);
-          ctx.lineTo(end[0], end[1]);
-          ctx.stroke();
-        }
-      });
-
-      // Draw landmarks
-      landmarks.forEach(point => {
-        ctx.beginPath();
-        ctx.arc(point[0], point[1], 4, 0, 2 * Math.PI);
-        ctx.fillStyle = 'red';
-        ctx.fill();
-      });
-    }
-
-    // Function to check win condition based on proximity to winMarker and collision with opponents
-    function checkWinCondition() {
-      // Existing condition: Reached targetNodeId
-      if (currentNodeId === targetNodeId) {
-        // Stop processing hand data
-        predictions = [];
-        document.getElementById('status').textContent = 'You have reached your destination! Game Over.';
-        showEndOverlay('You have reached your destination! Game Over.');
-        stopGame(false); // Do not hide the overlay
-        return;
-      }
-
-      // New condition: Reached winNodeId within WIN_RADIUS meters
-      const playerLatLng = playerMarker.getLatLng();
-      const winLatLng = winMarker.getLatLng();
-
-      const distanceToWin = playerLatLng.distanceTo(winLatLng); // Distance in meters
-
-      if (distanceToWin <= WIN_RADIUS) {
-        // Stop processing hand data
-        predictions = [];
-        document.getElementById('status').textContent = 'Congratulations! You have reached the win destination! Game Over.';
-        showEndOverlay('Congratulations! You have reached the win destination! Game Over.');
-        stopGame(false); // Do not hide the overlay
-        return;
-      }
-
-      // Check collision with opponents
-      opponents.forEach(opponent => {
-        const opponentLatLng = opponent.marker.getLatLng();
-        const distanceToPlayer = playerLatLng.distanceTo(opponentLatLng); // Distance in meters
-
-        if (distanceToPlayer <= COLLISION_RADIUS) {
-          // Player dies
-          predictions = [];
-          document.getElementById('status').textContent = 'Oh no! An opponent has caught you. Game Over.';
-          showCaptureOverlay(); // Display the overlay image
-          stopGame(false); // Do not hide the overlay
-        }
-      });
-    }
-
-    // Function to toggle the game state (Start/Stop)
-    function toggleGame() {
-      if (!gameRunning) {
-        startGame();
-      } else {
-        stopGame();
-      }
-    }
-
-    // Function to move opponents towards the player
-    function moveOpponents() {
-      opponents.forEach(opponent => {
-        if (!opponent.currentNodeId || !nodes[opponent.currentNodeId]) return;
-
-        const playerLat = nodes[currentNodeId].lat;
-        const playerLon = nodes[currentNodeId].lon;
-        const opponentLat = nodes[opponent.currentNodeId].lat;
-        const opponentLon = nodes[opponent.currentNodeId].lon;
-
-        // Find the neighbor that is closest to the player
-        const neighbors = nodes[opponent.currentNodeId].neighbors;
-        let nextNodeId = null;
-        let minDistance = Infinity;
-
-        neighbors.forEach(neighborId => {
-          const neighbor = nodes[neighborId];
-          const distance = getDistance(playerLat, playerLon, neighbor.lat, neighbor.lon);
-          if (distance < minDistance) {
-            minDistance = distance;
-            nextNodeId = neighborId;
-          }
-        });
-
-        if (nextNodeId) {
-          // Move opponent to the next node
-          opponent.currentNodeId = nextNodeId;
-          const newLatLng = [nodes[nextNodeId].lat, nodes[nextNodeId].lon];
-          opponent.marker.setLatLng(newLatLng);
-        }
-      });
-
-      // After moving all opponents, check for collisions
-      checkWinCondition();
-    }
-
-    // Function to spawn opponents with random images and sounds
-    function spawnOpponents() {
-      const nodeIds = Object.keys(nodes);
-      const maxOpponents = 20; // Maximum number of opponents
-      const minOpponents = 3; // Minimum number of opponents
-      const numberOfOpponents = Math.floor(Math.random() * (maxOpponents - minOpponents + 1)) + minOpponents;
-
-      for (let i = 0; i < numberOfOpponents; i++) {
-        // Select a random node for the opponent, ensuring it's not the player, target, or win node
-        const availableNodes = nodeIds.filter(id => id !== currentNodeId && id !== targetNodeId && id !== winNodeId);
-        if (availableNodes.length === 0) break; // No available nodes
-
-        const opponentNodeId = availableNodes[Math.floor(Math.random() * availableNodes.length)];
-
-        // Assign a random image to the opponent
-        const randomImage = opponentImages[Math.floor(Math.random() * opponentImages.length)];
-
-        // Create opponent icon with the selected image
-        const opponentIcon = L.icon({
-          iconUrl: randomImage,
-          iconSize: [32, 32], // Adjust size as needed
-          iconAnchor: [16, 32], // Adjust anchor as needed
-          popupAnchor: [0, -32] // Adjust popup position as needed
-        });
-
-        const opponentMarker = L.marker([nodes[opponentNodeId].lat, nodes[opponentNodeId].lon], {
-          title: `Opponent ${i + 1}`,
-          icon: opponentIcon,
-        }).addTo(map);
-
-        // Assign a random sound to the opponent
-        let opponentSound = null;
-        if (opponentSounds.length > 0) {
-          const randomSoundPath = opponentSounds[Math.floor(Math.random() * opponentSounds.length)];
-          opponentSound = new Audio(randomSoundPath);
-          opponentSound.loop = true;
-          opponentSound.volume = 0.5; // Adjust volume as needed
-          opponentSound.play().catch(error => {
-            console.error(`Error playing sound for Opponent ${i + 1}:`, error);
-          });
-        }
-
-        opponents.push({
-          marker: opponentMarker,
-          currentNodeId: opponentNodeId,
-          sound: opponentSound // Store the Audio object
-        });
-      }
-
-      // Start opponents' movement
-      opponentMovementInterval = setInterval(moveOpponents, 1000); // Move opponents every 1 second
     }
 
     // Function to show the capture overlay
