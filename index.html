@@ -343,6 +343,16 @@
     let opponentMovementInterval; // Interval ID for opponents' movement
     let gameRunning = false; // Game state
 
+
+    // Safe Zone variables
+    const safeZones = [];
+    const SAFE_ZONE_RADIUS = 50; // meters
+    const SAFE_ZONE_DURATION = 10000; // milliseconds
+
+    // Collectible variables
+    const collectibles = [];
+    const COLLECTIBLE_TYPES = ['speed', 'health', 'invisibility'];
+
     // Constants
     const ESCAPE_RADIUS_MILES = 1; // 1 mile radius
     const MILES_TO_METERS = 1609.34; // Conversion factor
@@ -394,6 +404,117 @@
       const distance = R * c; // in meters
       return distance;
     }
+
+
+
+    // Function to create safe zones
+    function createSafeZones() {
+      const numSafeZones = 3; // Adjust as needed
+      const nodeIds = Object.keys(nodes);
+      for (let i = 0; i < numSafeZones; i++) {
+        const randomNodeId = nodeIds[Math.floor(Math.random() * nodeIds.length)];
+        const safeZone = {
+          lat: nodes[randomNodeId].lat,
+          lon: nodes[randomNodeId].lon,
+          marker: L.marker([nodes[randomNodeId].lat, nodes[randomNodeId].lon], {
+            icon: L.icon({
+              iconUrl: 'images/safe-zone.png', // Replace with your safe zone icon
+              iconSize: [32, 32],
+              iconAnchor: [16, 16]
+            })
+          }).addTo(map)
+        };
+        safeZones.push(safeZone);
+      }
+    }
+
+    // Function to check if player is in a safe zone
+    function checkSafeZone() {
+      const playerPos = playerMarker.getLatLng();
+      for (const safeZone of safeZones) {
+        const distance = getDistanceMeters(playerPos.lat, playerPos.lng, safeZone.lat, safeZone.lon);
+        if (distance <= SAFE_ZONE_RADIUS) {
+          activateSafeZone();
+          return;
+        }
+      }
+    }
+
+    // Function to activate safe zone effects
+    function activateSafeZone() {
+      document.getElementById('status').textContent = 'You entered a Safe Zone! Temporary immunity activated.';
+      // Implement immunity logic here
+      setTimeout(() => {
+        document.getElementById('status').textContent = 'Safe Zone effect has worn off.';
+        // Remove immunity
+      }, SAFE_ZONE_DURATION);
+    }
+
+
+
+    // Function to create collectibles
+    function createCollectibles() {
+      const numCollectibles = 5; // Adjust as needed
+      const nodeIds = Object.keys(nodes);
+      for (let i = 0; i < numCollectibles; i++) {
+        const randomNodeId = nodeIds[Math.floor(Math.random() * nodeIds.length)];
+        const type = COLLECTIBLE_TYPES[Math.floor(Math.random() * COLLECTIBLE_TYPES.length)];
+        const collectible = {
+          type: type,
+          lat: nodes[randomNodeId].lat,
+          lon: nodes[randomNodeId].lon,
+          marker: L.marker([nodes[randomNodeId].lat, nodes[randomNodeId].lon], {
+            icon: L.icon({
+              iconUrl: `images/${type}-collectible.png`, // Replace with your collectible icons
+              iconSize: [24, 24],
+              iconAnchor: [12, 12]
+            })
+          }).addTo(map)
+        };
+        collectibles.push(collectible);
+      }
+    }
+
+    // Function to check if player collected an item
+    function checkCollectibles() {
+      const playerPos = playerMarker.getLatLng();
+      for (let i = collectibles.length - 1; i >= 0; i--) {
+        const collectible = collectibles[i];
+        const distance = getDistanceMeters(playerPos.lat, playerPos.lng, collectible.lat, collectible.lon);
+        if (distance <= 5) { // 5 meters collection radius
+          activateCollectible(collectible);
+          map.removeLayer(collectible.marker);
+          collectibles.splice(i, 1);
+          return;
+        }
+      }
+    }
+
+    // Function to activate collectible effects
+    function activateCollectible(collectible) {
+      switch (collectible.type) {
+        case 'speed':
+          document.getElementById('status').textContent = 'Speed boost activated!';
+          // Implement speed boost logic here
+          setTimeout(() => {
+            document.getElementById('status').textContent = 'Speed boost has worn off.';
+          }, 5000);
+          break;
+        case 'health':
+          document.getElementById('status').textContent = 'Health restored!';
+          // Implement health restoration logic here
+          break;
+        case 'invisibility':
+          document.getElementById('status').textContent = 'Temporary invisibility activated!';
+          // Implement invisibility logic here
+          setTimeout(() => {
+            document.getElementById('status').textContent = 'Invisibility has worn off.';
+          }, 7000);
+          break;
+      }
+    }
+
+
 
     // Initialize the map
     function initMap(centerCoordinates) {
@@ -539,9 +660,11 @@
         }
       });
 
-      // Place player and targets if not already placed
-      if (!playerMarker) {
+    // Place player and targets if not already placed
+    if (!playerMarker) {
         placePlayer();
+        createSafeZones();
+        createCollectibles();
         setupHandpose();
       }
     }
@@ -607,6 +730,9 @@
         iconAnchor: [16, 32], // Adjust anchor as needed
         popupAnchor: [0, -32] // Adjust popup position as needed
       });
+
+      createSafeZones();
+      createCollectibles();
 
       winMarker = L.marker([nodes[winNodeId].lat, nodes[winNodeId].lon], {
         title: 'Escape Point',
@@ -694,6 +820,11 @@
         animateMovement(playerMarker, startLatLng, endLatLng, 500, () => {
           currentNodeId = nextNodeId;
           isMoving = false;
+
+                
+          checkSafeZone();
+          checkCollectibles();
+
           checkWinCondition();
           checkPlayerPosition();
           // Opponents will automatically update their paths in their intervals
