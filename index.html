@@ -60,6 +60,20 @@
       letter-spacing: 2px;
     }
 
+    #healthDisplay {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      z-index: 1000;
+      background: rgba(0, 0, 0, 0.6);
+      padding: 10px 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+      font-size: 16px;
+      color: #fff;
+      display: none; /* Hidden initially */
+    }
+
     #citySelect {
       padding: 12px 20px;
       font-size: 18px;
@@ -296,6 +310,8 @@
   <!-- Status Message -->
   <div id="status">Press "Start Game" to begin.</div>
 
+  <div id="healthDisplay">Health: 100</div>
+
   <!-- Video and Canvas for Hand Control -->
   <div id="videoContainer">
     <video id="video" autoplay muted playsinline></video>
@@ -314,6 +330,9 @@
   <script>
     // OpenWeatherMap API Key
     const OPENWEATHERMAP_API_KEY = '01a9cefb1b65015d398e3a63bb58ef81'; // Replace with your actual API key
+
+    let playerHealth = 100; // Starting health
+
 
     // Initialize variables
     let map;
@@ -406,6 +425,22 @@
     }
 
 
+    function updateHealthDisplay() {
+      const healthDisplay = document.getElementById('healthDisplay');
+      healthDisplay.textContent = `Health: ${playerHealth}`;
+      
+      // Change color based on health level
+      if (playerHealth > 70) {
+        healthDisplay.style.color = 'lime';
+      } else if (playerHealth > 30) {
+        healthDisplay.style.color = 'yellow';
+      } else {
+        healthDisplay.style.color = 'red';
+      }
+    }
+
+
+
 
     // Function to create safe zones
     function createSafeZones() {
@@ -418,7 +453,7 @@
           lon: nodes[randomNodeId].lon,
           marker: L.marker([nodes[randomNodeId].lat, nodes[randomNodeId].lon], {
             icon: L.icon({
-              iconUrl: 'images/safe-zone.png', // Replace with your safe zone icon
+              iconUrl: 'images/safe-zone.webp', // Replace with your safe zone icon
               iconSize: [32, 32],
               iconAnchor: [16, 16]
             })
@@ -516,24 +551,24 @@
 
 
 
-    // Initialize the map
-    function initMap(centerCoordinates) {
-      // Show the map first to ensure it's visible
-      document.getElementById('map').style.display = 'block';
+  // Initialize the map function
+  function initMap(centerCoordinates) {
+    // Show the map first to ensure it's visible
+    document.getElementById('map').style.display = 'block';
 
-      // Initialize the Leaflet map
-      map = L.map('map').setView([centerCoordinates.lat, centerCoordinates.lon], 16);
+    // Set a higher zoom level for maximum view
+    map = L.map('map').setView([centerCoordinates.lat, centerCoordinates.lon], 20); // Change zoom level here
 
-      // Add OpenStreetMap tile layer
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors',
-      }).addTo(map);
+    // Add OpenStreetMap tile layer
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors',
+    }).addTo(map);
 
-      // Invalidate map size to fix rendering issues
-      setTimeout(() => {
-        map.invalidateSize();
-      }, 100);
-    }
+    // Invalidate map size to fix rendering issues
+    setTimeout(() => {
+      map.invalidateSize();
+    }, 100);
+  }
 
     // Fetch street data from OpenStreetMap
     function fetchStreetData(bbox, callback) {
@@ -607,6 +642,13 @@
         loadedAreas.push(bbox);
         loadingData = false;
       });
+    }
+
+
+    function decreaseHealth(amount) {
+      playerHealth -= amount;
+      if (playerHealth < 0) playerHealth = 0;
+      updateHealthDisplay();
     }
 
     // Utility function to compare bounding boxes
@@ -740,6 +782,11 @@
       }).addTo(map);
 
       map.setView([nodes[currentNodeId].lat, nodes[currentNodeId].lon], 17);
+
+      playerHealth = 100; // Initialize player health
+      document.getElementById('healthDisplay').style.display = 'block'; // Show the health display
+      updateHealthDisplay(); // Update the health display
+
       document.getElementById('status').textContent = 'Use your palm to navigate. Reach the escape point!';
       document.getElementById('status').style.display = 'block';
     }
@@ -816,8 +863,10 @@
         const nextNode = nodes[nextNodeId];
         const startLatLng = L.latLng(currentNode.lat, currentNode.lon);
         const endLatLng = L.latLng(nextNode.lat, nextNode.lon);
+        const distance = startLatLng.distanceTo(endLatLng);
+        const duration = distance * 10; // Adjust this multiplier to change movement speed
 
-        animateMovement(playerMarker, startLatLng, endLatLng, 500, () => {
+        animateMovement(playerMarker, startLatLng, endLatLng, duration, () => {
           currentNodeId = nextNodeId;
           isMoving = false;
 
@@ -826,6 +875,7 @@
           checkCollectibles();
 
           checkWinCondition();
+          updateHealthDisplay();
           checkPlayerPosition();
           // Opponents will automatically update their paths in their intervals
         });
@@ -1014,11 +1064,29 @@
         const distanceToPlayer = playerLatLng.distanceTo(opponentLatLng); // Distance in meters
 
         if (distanceToPlayer <= COLLISION_RADIUS) {
-          // Player dies
-          predictions = [];
-          document.getElementById('status').textContent = 'Oh no! An opponent has caught you. Game Over.';
-          showCaptureOverlay(); // Display the overlay image
-          stopGame(false); // Do not hide the overlay
+          
+           // Decrease player health
+          decreaseHealth(10); // Decrease health by 10 on collision
+
+
+
+          if (playerHealth <= 0) {
+            // Player dies
+            predictions = [];
+            document.getElementById('status').textContent = 'Oh no! You\'ve been caught! Game Over.';
+            showCaptureOverlay(); // Display the overlay image
+            stopGame(false); // Do not hide the overlay
+          } else {
+            // Player is still alive, update status
+            document.getElementById('status').textContent = `Ouch! You've been hit. Health: ${playerHealth}`;
+          }
+
+
+
+          // predictions = [];
+          // document.getElementById('status').textContent = 'Oh no! An opponent has caught you. Game Over.';
+          // showCaptureOverlay(); // Display the overlay image
+          // stopGame(false); // Do not hide the overlay
         }
       });
     }
