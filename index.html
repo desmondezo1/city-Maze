@@ -66,6 +66,7 @@
       border: none;
       border-radius: 8px;
       margin-bottom: 30px;
+      margin-top:20px;
       width: 220px;
       text-align: center;
       background: rgba(255, 255, 255, 0.9);
@@ -268,7 +269,23 @@
   <!-- Start Screen -->
   <div id="startScreen" class="visible">
     <h1>Zombie City Adventure</h1>
-    <select id="citySelect">
+
+
+    <input list="list-of-cities" id="citySelect" name="ice-cream-choice" />
+
+    <datalist id="list-of-cities">
+      <option value="Bournemouth">Bournemouth</option>
+      <option value="Lagos">Lagos</option>
+      <option value="London">London</option>
+      <option value="Port Harcourt">Port Harcourt</option>
+      <option value="New York">New York</option>
+      <option value="Tokyo">Tokyo</option>
+      <option value="Paris">Paris</option>
+      <option value="Berlin">Berlin</option>
+    </datalist>
+
+
+    <!-- <select id="citySelect">
       <option value="" disabled selected>Select Your City</option>
       <option value="Bournemouth">Bournemouth</option>
       <option value="Lagos">Lagos</option>
@@ -278,8 +295,8 @@
       <option value="Tokyo">Tokyo</option>
       <option value="Paris">Paris</option>
       <option value="Berlin">Berlin</option>
-      <!-- Add more cities as needed -->
-    </select>
+    </select> -->
+
     <button id="startGameButton">Start Game</button>
   </div>
 
